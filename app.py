@@ -10,6 +10,10 @@ from io import BytesIO
 from matplotlib.lines import Line2D
 from matplotlib.patches import FancyArrowPatch
 from streamlit_image_coordinates import streamlit_image_coordinates
+import tempfile
+import os
+from datetime import date
+from fpdf import FPDF
 
 # ==========================
 # Page Configuration
@@ -30,11 +34,9 @@ BOX_Y_MAX = 62
 GOAL_X = 120
 GOAL_Y = 40
 
-# Corredores para Switch Pass (pitch StatsBomb: y vai de 0 a 80)
 LANE_LEFT_MIN = 53.33
 LANE_RIGHT_MAX = 26.67
 
-# Cores
 COLOR_SUCCESS = "#B0B0B0"
 COLOR_FAIL = "#D45B5B"
 COLOR_PROGRESSIVE = "#2F80ED"
@@ -184,7 +186,6 @@ def distance_to_goal(x, y):
 
 
 def get_lane(y):
-    """Retorna o corredor: 'left', 'center' ou 'right'."""
     if y >= LANE_LEFT_MIN:
         return "left"
     elif y < LANE_RIGHT_MAX:
@@ -194,10 +195,6 @@ def get_lane(y):
 
 
 def is_switch_pass(x_start, y_start, y_end) -> bool:
-    """
-    Switch Pass: muda do corredor esquerdo para direito ou vice-versa,
-    e o passe deve iniciar no primeiro terço (x < 40) ou segundo terço (40 <= x < 80).
-    """
     if x_start >= FINAL_THIRD_LINE_X:
         return False
     lane_start = get_lane(y_start)
@@ -210,11 +207,6 @@ def is_switch_pass(x_start, y_start, y_end) -> bool:
 
 
 def is_progressive_pass(x_start, y_start, x_end, y_end) -> bool:
-    """
-    Progressive Pass:
-    Um passe COMPLETADO nos dois terços ofensivos do campo (x_start >= 35)
-    que move a bola pelo menos 25% mais perto do gol.
-    """
     if x_start < 35:
         return False
     start_dist = distance_to_goal(x_start, y_start)
@@ -264,7 +256,6 @@ def compute_stats(df: pd.DataFrame) -> dict:
     unsuccessful = total_passes - successful
     accuracy = (successful / total_passes * 100.0) if total_passes else 0.0
 
-    # Progressive (já filtrado para WON no build)
     progressive_total = int(df["progressive"].sum())
     progressive_unsuccessful = int(
         (~df["is_won"] & df.apply(
@@ -282,7 +273,6 @@ def compute_stats(df: pd.DataFrame) -> dict:
 
     key_passes = int(df["video"].apply(has_video_value).sum())
 
-    # To the Final Third
     to_final_third = (df["x_start"] < FINAL_THIRD_LINE_X) & (df["x_end"] >= FINAL_THIRD_LINE_X)
     to_final_third_total = int(to_final_third.sum())
     to_final_third_success = int((to_final_third & df["is_won"]).sum())
@@ -290,7 +280,6 @@ def compute_stats(df: pd.DataFrame) -> dict:
         (to_final_third_success / to_final_third_total * 100.0) if to_final_third_total else 0.0
     )
 
-    # Into the Box
     to_box = (
         (df["x_end"] >= BOX_X_MIN)
         & (df["y_end"] >= BOX_Y_MIN)
@@ -301,7 +290,6 @@ def compute_stats(df: pd.DataFrame) -> dict:
     box_unsuccess = box_total - box_success
     box_accuracy = (box_success / box_total * 100.0) if box_total else 0.0
 
-    # Switch Pass
     switch_total = int(df["switch"].sum())
     switch_success = int((df["switch"] & df["is_won"]).sum())
     switch_unsuccess = switch_total - switch_success
@@ -358,7 +346,6 @@ def draw_pass_map(df: pd.DataFrame, title: str):
         is_sw = bool(row["switch"])
         has_vid = has_video_value(row["video"])
 
-        # Hierarquia de cor: fail > switch > progressive > success
         if is_lost:
             if is_sw:
                 color = COLOR_SWITCH
@@ -440,6 +427,137 @@ def draw_pass_map(df: pd.DataFrame, title: str):
 
 
 # ==========================
+# PDF Export
+# ==========================
+def generate_pdf(
+    df: pd.DataFrame,
+    stats: dict,
+    img_obj: Image.Image,
+    match_name: str,
+    pass_filter: str,
+) -> bytes:
+    pdf = FPDF(orientation="P", unit="mm", format="A4")
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+
+    # ── Header ──────────────────────────────────────────────────────────────
+    pdf.set_font("Helvetica", "B", 18)
+    pdf.cell(0, 10, "Pass Map Dashboard", ln=True, align="C")
+    pdf.set_font("Helvetica", "", 11)
+    pdf.cell(0, 7, f"Match: {match_name}   |   Filter: {pass_filter}", ln=True, align="C")
+    pdf.set_font("Helvetica", "I", 9)
+    pdf.cell(0, 6, f"Generated on {date.today().strftime('%d %B %Y')}", ln=True, align="C")
+    pdf.ln(4)
+    pdf.set_draw_color(180, 180, 180)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(5)
+
+    # ── Statistics ──────────────────────────────────────────────────────────
+    pdf.set_font("Helvetica", "B", 13)
+    pdf.cell(0, 8, "Statistics", ln=True)
+    pdf.ln(1)
+
+    # helper: draw a 3-column stat row
+    def stat_row(label, col1, col2, col3, header=False):
+        pdf.set_font("Helvetica", "B" if header else "", 9)
+        pdf.set_fill_color(230, 230, 230)
+        fill = header
+        pdf.cell(70, 7, label, border=1, ln=False, align="L", fill=fill)
+        pdf.cell(40, 7, str(col1), border=1, ln=False, align="C", fill=fill)
+        pdf.cell(40, 7, str(col2), border=1, ln=False, align="C", fill=fill)
+        pdf.cell(40, 7, str(col3), border=1, ln=True,  align="C", fill=fill)
+
+    stat_row("Category", "Total", "Successful", "Accuracy", header=True)
+    stat_row(
+        "Overall Passes",
+        stats["total_passes"],
+        stats["successful_passes"],
+        f'{stats["accuracy_pct"]:.1f}%',
+    )
+    stat_row(
+        "Progressive Passes",
+        stats["progressive_attempted"],
+        stats["progressive_successful"],
+        f'{stats["progressive_accuracy_pct"]:.1f}%',
+    )
+    stat_row(
+        "To the Final Third",
+        stats["to_final_third_total"],
+        stats["to_final_third_success"],
+        f'{stats["to_final_third_accuracy_pct"]:.1f}%',
+    )
+    stat_row(
+        "Passes Into the Box",
+        stats["box_total"],
+        stats["box_success"],
+        f'{stats["box_accuracy_pct"]:.1f}%',
+    )
+
+    # Switch row needs an extra column
+    pdf.set_font("Helvetica", "", 9)
+    pdf.cell(70, 7, "Switch Passes", border=1, ln=False, align="L")
+    pdf.cell(30, 7, str(stats["switch_total"]),   border=1, ln=False, align="C")
+    pdf.cell(30, 7, str(stats["switch_success"]), border=1, ln=False, align="C")
+    pdf.cell(30, 7, f'{stats["switch_accuracy_pct"]:.1f}%', border=1, ln=False, align="C")
+    pdf.cell(30, 7, f'{stats["switch_pct_of_total"]:.1f}% of total', border=1, ln=True, align="C")
+
+    pdf.ln(6)
+
+    # ── Pass Map image ───────────────────────────────────────────────────────
+    pdf.set_font("Helvetica", "B", 13)
+    pdf.cell(0, 8, "Pass Map", ln=True)
+    pdf.ln(1)
+
+    tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+    try:
+        img_obj.save(tmp.name, format="PNG")
+        tmp.close()
+        # Centre image; max width = 190 mm (A4 margins)
+        img_w_mm = 190
+        img_h_mm = img_w_mm * img_obj.height / img_obj.width
+        x_pos = (210 - img_w_mm) / 2
+        pdf.image(tmp.name, x=x_pos, y=pdf.get_y(), w=img_w_mm, h=img_h_mm)
+        pdf.ln(img_h_mm + 4)
+    finally:
+        os.unlink(tmp.name)
+
+    # ── Pass List table ──────────────────────────────────────────────────────
+    pdf.set_font("Helvetica", "B", 13)
+    pdf.cell(0, 8, "Pass List", ln=True)
+    pdf.ln(1)
+
+    col_widths = [10, 28, 20, 20, 20, 20, 22, 22]  # total ≈ 162 mm
+    headers    = ["#", "Type", "x_start", "y_start", "x_end", "y_end", "Progressive", "Switch"]
+
+    pdf.set_font("Helvetica", "B", 8)
+    pdf.set_fill_color(230, 230, 230)
+    for w, h in zip(col_widths, headers):
+        pdf.cell(w, 7, h, border=1, align="C", fill=True)
+    pdf.ln()
+
+    pdf.set_font("Helvetica", "", 8)
+    for _, row in df.iterrows():
+        row_data = [
+            str(int(row["number"])),
+            row["type"],
+            f'{row["x_start"]:.2f}',
+            f'{row["y_start"]:.2f}',
+            f'{row["x_end"]:.2f}',
+            f'{row["y_end"]:.2f}',
+            "Yes" if row["progressive"] else "No",
+            "Yes" if row["switch"] else "No",
+        ]
+        # Alternate row shading
+        fill = (int(row["number"]) % 2 == 0)
+        pdf.set_fill_color(245, 245, 245)
+        for w, val in zip(col_widths, row_data):
+            pdf.cell(w, 6, val, border=1, align="C", fill=fill)
+        pdf.ln()
+
+    return bytes(pdf.output())
+
+
+# ==========================
 # Sidebar
 # ==========================
 st.sidebar.header("Match Selection")
@@ -476,6 +594,27 @@ elif pass_filter == "Switch Only":
     df = df[df["switch"]].reset_index(drop=True)
 
 stats = compute_stats(df)
+
+# ── Export button (sidebar) ──────────────────────────────────────────────────
+st.sidebar.divider()
+st.sidebar.header("Export")
+
+# We generate the image here once so the sidebar button can use it.
+# The main area will reuse the same img_obj.
+_img_for_pdf, _ax_tmp, _fig_tmp = draw_pass_map(df, title=f"Pass Map — {selected_match}")
+plt.close(_fig_tmp)
+
+pdf_bytes = generate_pdf(
+    df, stats, _img_for_pdf, selected_match, pass_filter
+)
+safe_match  = selected_match.replace(" ", "_")
+safe_filter = pass_filter.replace(" ", "_")
+st.sidebar.download_button(
+    label="📄 Export to PDF",
+    data=pdf_bytes,
+    file_name=f"pass_map_{safe_match}_{safe_filter}.pdf",
+    mime="application/pdf",
+)
 
 # ==========================
 # Caption
