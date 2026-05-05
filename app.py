@@ -20,6 +20,53 @@ from streamlit_image_coordinates import streamlit_image_coordinates
 st.set_page_config(layout="wide", page_title="Pass Map Dashboard", initial_sidebar_state="expanded")
 
 # ==========================
+# Light UI tweaks (concise/elegant + grey blocks)
+# ==========================
+st.markdown("""
+<style>
+/* Smaller main title */
+h1 {
+    font-size: 2.0rem !important;
+    font-weight: 300 !important;
+}
+
+/* Statistics cards */
+.stats-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+}
+.stat-card {
+    background: linear-gradient(180deg, #f7f7f7 0%, #f1f1f1 100%);
+    border: 1px solid #e5e5e5;
+    border-radius: 12px;
+    padding: 10px 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.stat-card-title {
+    font-size: 11px;
+    letter-spacing: 0.7px;
+    text-transform: uppercase;
+    color: #666666;
+    font-weight: 600;
+    margin-bottom: 7px;
+}
+.stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 13px;
+    color: #555555;
+    padding: 2px 0;
+}
+.stat-row .val {
+    font-weight: 700;
+    color: #222222;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ==========================
 # Configuration & Constants
 # ==========================
 FINAL_THIRD_LINE_X = 80
@@ -573,86 +620,48 @@ with col_map:
         else:
             st.warning("No video is attached to this event.")
 
-# ── Direita: Estatísticas Profissionais em Layout Compacto HTML/CSS ──────────
+# ── Direita: Statistics em blocos cinza (conciso e elegante) ─────────────────
 with col_stats:
-    st.markdown("<h3 style='font-weight: 400; margin-top: 0;'>Statistics</h3>", unsafe_allow_html=True)
-    
+    st.markdown("<h3 style='font-weight: 400; margin-top: 0; font-size: 20px;'>Statistics</h3>", unsafe_allow_html=True)
+
     stats_html = f"""
-    <style>
-    .stat-container {{
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        background-color: #ffffff;
-        padding: 5px 10px;
-    }}
-    .stat-section {{
-        margin-bottom: 16px;
-    }}
-    .stat-title {{
-        font-size: 14px;
-        font-weight: 600;
-        color: #333333;
-        margin-bottom: 6px;
-        padding-bottom: 4px;
-        border-bottom: 1px solid #eaeaea;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }}
-    .stat-row {{
-        display: flex;
-        justify-content: space-between;
-        font-size: 13px;
-        color: #555555;
-        padding: 3px 0;
-    }}
-    .stat-val {{
-        font-weight: 600;
-        color: #111111;
-    }}
-    </style>
-
-    <div class="stat-container">
-        <!-- Overall Passes -->
-        <div class="stat-section">
-            <div class="stat-title">Overall Passes</div>
-            <div class="stat-row"><span>Total</span> <span class="stat-val">{stats['total_passes']}</span></div>
-            <div class="stat-row"><span>Successful</span> <span class="stat-val">{stats['successful_passes']}</span></div>
-            <div class="stat-row"><span>Unsuccessful</span> <span class="stat-val">{stats['unsuccessful_passes']}</span></div>
-            <div class="stat-row"><span>Accuracy</span> <span class="stat-val">{stats['accuracy_pct']:.1f}%</span></div>
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-card-title">Overall Passes</div>
+            <div class="stat-row"><span>Total</span><span class="val">{stats['total_passes']}</span></div>
+            <div class="stat-row"><span>Successful</span><span class="val">{stats['successful_passes']}</span></div>
+            <div class="stat-row"><span>Unsuccessful</span><span class="val">{stats['unsuccessful_passes']}</span></div>
+            <div class="stat-row"><span>Accuracy</span><span class="val">{stats['accuracy_pct']:.1f}%</span></div>
         </div>
 
-        <!-- Progressive Passes -->
-        <div class="stat-section">
-            <div class="stat-title">Progressive Passes</div>
-            <div class="stat-row"><span>Attempted</span> <span class="stat-val">{stats['progressive_attempted']}</span></div>
-            <div class="stat-row"><span>Successful</span> <span class="stat-val">{stats['progressive_successful']}</span></div>
-            <div class="stat-row"><span>Accuracy</span> <span class="stat-val">{stats['progressive_accuracy_pct']:.1f}%</span></div>
+        <div class="stat-card">
+            <div class="stat-card-title">Progressive Passes</div>
+            <div class="stat-row"><span>Attempted</span><span class="val">{stats['progressive_attempted']}</span></div>
+            <div class="stat-row"><span>Successful</span><span class="val">{stats['progressive_successful']}</span></div>
+            <div class="stat-row"><span>Accuracy</span><span class="val">{stats['progressive_accuracy_pct']:.1f}%</span></div>
         </div>
 
-        <!-- To Final Third -->
-        <div class="stat-section">
-            <div class="stat-title">To the Final Third</div>
-            <div class="stat-row"><span>Total</span> <span class="stat-val">{stats['to_final_third_total']}</span></div>
-            <div class="stat-row"><span>Successful</span> <span class="stat-val">{stats['to_final_third_success']}</span></div>
-            <div class="stat-row"><span>Accuracy</span> <span class="stat-val">{stats['to_final_third_accuracy_pct']:.1f}%</span></div>
+        <div class="stat-card">
+            <div class="stat-card-title">To the Final Third</div>
+            <div class="stat-row"><span>Total</span><span class="val">{stats['to_final_third_total']}</span></div>
+            <div class="stat-row"><span>Successful</span><span class="val">{stats['to_final_third_success']}</span></div>
+            <div class="stat-row"><span>Accuracy</span><span class="val">{stats['to_final_third_accuracy_pct']:.1f}%</span></div>
         </div>
 
-        <!-- Passes Into the Box -->
-        <div class="stat-section">
-            <div class="stat-title">Passes Into the Box</div>
-            <div class="stat-row"><span>Total</span> <span class="stat-val">{stats['box_total']}</span></div>
-            <div class="stat-row"><span>Successful</span> <span class="stat-val">{stats['box_success']}</span></div>
-            <div class="stat-row"><span>Accuracy</span> <span class="stat-val">{stats['box_accuracy_pct']:.1f}%</span></div>
+        <div class="stat-card">
+            <div class="stat-card-title">Passes Into the Box</div>
+            <div class="stat-row"><span>Total</span><span class="val">{stats['box_total']}</span></div>
+            <div class="stat-row"><span>Successful</span><span class="val">{stats['box_success']}</span></div>
+            <div class="stat-row"><span>Accuracy</span><span class="val">{stats['box_accuracy_pct']:.1f}%</span></div>
         </div>
 
-        <!-- Switch Passes -->
-        <div class="stat-section">
-            <div class="stat-title">Switch Passes</div>
-            <div class="stat-row"><span>Total</span> <span class="stat-val">{stats['switch_total']}</span></div>
-            <div class="stat-row"><span>Successful</span> <span class="stat-val">{stats['switch_success']}</span></div>
-            <div class="stat-row"><span>Accuracy</span> <span class="stat-val">{stats['switch_accuracy_pct']:.1f}%</span></div>
-            <div class="stat-row"><span>% of Total Passes</span> <span class="stat-val">{stats['switch_pct_of_total']:.1f}%</span></div>
+        <div class="stat-card">
+            <div class="stat-card-title">Switch Passes</div>
+            <div class="stat-row"><span>Total</span><span class="val">{stats['switch_total']}</span></div>
+            <div class="stat-row"><span>Successful</span><span class="val">{stats['switch_success']}</span></div>
+            <div class="stat-row"><span>Accuracy</span><span class="val">{stats['switch_accuracy_pct']:.1f}%</span></div>
+            <div class="stat-row"><span>% of Total</span><span class="val">{stats['switch_pct_of_total']:.1f}%</span></div>
         </div>
     </div>
     """
-    
     st.markdown(stats_html, unsafe_allow_html=True)
