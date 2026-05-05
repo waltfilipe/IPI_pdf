@@ -2,13 +2,14 @@ import streamlit as st
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
 from mplsoccer import Pitch
 import pandas as pd
 import numpy as np
 from PIL import Image
 from io import BytesIO
 from matplotlib.lines import Line2D
-from matplotlib.patches import FancyArrowPatch
+from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
 from streamlit_image_coordinates import streamlit_image_coordinates
 
 # ==========================
@@ -267,7 +268,6 @@ def compute_stats(df: pd.DataFrame) -> dict:
     unsuccessful = total_passes - successful
     accuracy = (successful / total_passes * 100.0) if total_passes else 0.0
 
-    # Progressive (já filtrado para WON no build)
     progressive_total = int(df["progressive"].sum())
     progressive_unsuccessful = int(
         (~df["is_won"] & df.apply(
@@ -285,7 +285,6 @@ def compute_stats(df: pd.DataFrame) -> dict:
 
     key_passes = int(df["video"].apply(has_video_value).sum())
 
-    # To the Final Third
     to_final_third = (df["x_start"] < FINAL_THIRD_LINE_X) & (df["x_end"] >= FINAL_THIRD_LINE_X)
     to_final_third_total = int(to_final_third.sum())
     to_final_third_success = int((to_final_third & df["is_won"]).sum())
@@ -293,7 +292,6 @@ def compute_stats(df: pd.DataFrame) -> dict:
         (to_final_third_success / to_final_third_total * 100.0) if to_final_third_total else 0.0
     )
 
-    # Into the Box
     to_box = (
         (df["x_end"] >= BOX_X_MIN)
         & (df["y_end"] >= BOX_Y_MIN)
@@ -304,7 +302,6 @@ def compute_stats(df: pd.DataFrame) -> dict:
     box_unsuccess = box_total - box_success
     box_accuracy = (box_success / box_total * 100.0) if box_total else 0.0
 
-    # Switch Pass
     switch_total = int(df["switch"].sum())
     switch_success = int((df["switch"] & df["is_won"]).sum())
     switch_unsuccess = switch_total - switch_success
@@ -336,7 +333,7 @@ def compute_stats(df: pd.DataFrame) -> dict:
 
 
 # ==========================
-# Draw pass map
+# Draw pass map (UI)
 # ==========================
 FIG_W, FIG_H = 7.9, 5.3
 FIG_DPI = 110
@@ -361,7 +358,6 @@ def draw_pass_map(df: pd.DataFrame, title: str):
         is_sw = bool(row["switch"])
         has_vid = has_video_value(row["video"])
 
-        # Hierarquia de cor: fail > switch > progressive > success
         if is_lost:
             if is_sw:
                 color = COLOR_SWITCH
@@ -402,19 +398,14 @@ def draw_pass_map(df: pd.DataFrame, title: str):
     ax.set_title(title, fontsize=12)
 
     legend_elements = [
-        Line2D([0], [0], color=COLOR_SUCCESS, lw=2.5, alpha=0.25,
-               label="Successful Pass"),
-        Line2D([0], [0], color=COLOR_FAIL, lw=2.5,
-               label="Unsuccessful Pass"),
-        Line2D([0], [0], color=COLOR_PROGRESSIVE, lw=2.5,
-               label="Progressive Pass"),
-        Line2D([0], [0], color=COLOR_SWITCH, lw=2.5,
-               label="Switch Pass"),
+        Line2D([0], [0], color=COLOR_SUCCESS, lw=2.5, alpha=0.25, label="Successful Pass"),
+        Line2D([0], [0], color=COLOR_FAIL, lw=2.5, label="Unsuccessful Pass"),
+        Line2D([0], [0], color=COLOR_PROGRESSIVE, lw=2.5, label="Progressive Pass"),
+        Line2D([0], [0], color=COLOR_SWITCH, lw=2.5, label="Switch Pass"),
         Line2D([0], [0], marker="o", color="w", markerfacecolor="gray",
                markeredgecolor="white", markersize=6, label="Start point (click)"),
         Line2D([0], [0], marker="o", color="w", markerfacecolor="gray",
-               markeredgecolor="#FFD54F", markeredgewidth=2, markersize=7,
-               label="Has video"),
+               markeredgecolor="#FFD54F", markeredgewidth=2, markersize=7, label="Has video"),
     ]
 
     legend = ax.legend(
@@ -429,8 +420,7 @@ def draw_pass_map(df: pd.DataFrame, title: str):
         arrowstyle="-|>", mutation_scale=15, linewidth=2, color="#333333",
     )
     fig.patches.append(arrow)
-    fig.text(0.5, 0.02, "Attack Direction",
-             ha="center", va="center", fontsize=9, color="#333333")
+    fig.text(0.5, 0.02, "Attack Direction", ha="center", va="center", fontsize=9, color="#333333")
 
     fig.tight_layout()
     fig.canvas.draw()
@@ -440,6 +430,139 @@ def draw_pass_map(df: pd.DataFrame, title: str):
     buf.seek(0)
     img_obj = Image.open(buf)
     return img_obj, ax, fig
+
+
+# ==========================
+# PDF Export
+# ==========================
+def generate_dashboard_pdf_bytes(df: pd.DataFrame, stats: dict, selected_match: str) -> bytes:
+    fig = plt.figure(figsize=(11.69, 8.27), dpi=220)  # A4 landscape
+    gs = fig.add_gridspec(nrows=1, ncols=2, width_ratios=[1.05, 2.2], wspace=0.08)
+
+    # Left panel (stats)
+    ax_left = fig.add_subplot(gs[0, 0])
+    ax_left.set_facecolor("#1f2128")
+    ax_left.set_xlim(0, 1)
+    ax_left.set_ylim(0, 1)
+    ax_left.axis("off")
+
+    ax_left.text(0.5, 0.97, "Statistics", ha="center", va="top",
+                 fontsize=13, color="#E6EAF0", fontweight="bold")
+
+    def draw_card(y_top, title, line_text):
+        h = 0.16
+        card = FancyBboxPatch(
+            (0.04, y_top - h), 0.92, h - 0.015,
+            boxstyle="round,pad=0.008,rounding_size=0.02",
+            linewidth=1, edgecolor="#343746", facecolor="#262730"
+        )
+        ax_left.add_patch(card)
+        ax_left.text(0.5, y_top - 0.035, title, ha="center", va="center",
+                     fontsize=12, color="#E6EAF0", fontweight="bold")
+        ax_left.plot([0.08, 0.92], [y_top - 0.055, y_top - 0.055], color="#3C4152", lw=1)
+        ax_left.text(0.08, y_top - 0.10, line_text, ha="left", va="center",
+                     fontsize=10.5, color="#F1F3F5")
+
+    y = 0.90
+    draw_card(y, "General Passes",
+              f"Total: {stats['total_passes']} | Successful: {stats['successful_passes']} | Accuracy: {stats['accuracy_pct']}%")
+    y -= 0.175
+    draw_card(y, "Progressive Passes",
+              f"Total: {stats['progressive_attempted']} | Successful: {stats['progressive_successful']} | Accuracy: {stats['progressive_accuracy_pct']}%")
+    y -= 0.175
+    draw_card(y, "To the Final Third",
+              f"Total: {stats['to_final_third_total']} | Successful: {stats['to_final_third_success']} | Accuracy: {stats['to_final_third_accuracy_pct']}%")
+    y -= 0.175
+    draw_card(y, "Passes Into the Box",
+              f"Total: {stats['box_total']} | Successful: {stats['box_success']} | Accuracy: {stats['box_accuracy_pct']}%")
+    y -= 0.175
+    draw_card(y, "Switch Passes",
+              f"Total: {stats['switch_total']} | Successful: {stats['switch_success']} | Accuracy: {stats['switch_accuracy_pct']}% | % Total: {stats['switch_pct_of_total']}%")
+
+    # Right panel (pitch)
+    ax_right = fig.add_subplot(gs[0, 1])
+    ax_right.remove()
+
+    pitch = Pitch(
+        pitch_type="statsbomb",
+        pitch_color="#f5f5f5",
+        line_color="#4a4a4a",
+    )
+    pitch.draw(ax=fig.add_subplot(gs[0, 1]))
+    ax_pitch = fig.axes[-1]
+
+    ax_pitch.axvline(x=FINAL_THIRD_LINE_X, color="#FFD54F", linewidth=1.2, alpha=0.25)
+
+    START_DOT_SIZE = 45
+    for _, row in df.iterrows():
+        is_lost = not row["is_won"]
+        is_prog = bool(row["progressive"])
+        is_sw = bool(row["switch"])
+        has_vid = has_video_value(row["video"])
+
+        if is_lost:
+            if is_sw:
+                color = COLOR_SWITCH
+                alpha = 0.60
+            else:
+                color = COLOR_FAIL
+                alpha = 0.55
+        elif is_sw:
+            color = COLOR_SWITCH
+            alpha = 0.85
+        elif is_prog:
+            color = COLOR_PROGRESSIVE
+            alpha = 0.82
+        else:
+            color = COLOR_SUCCESS
+            alpha = 0.25
+
+        pitch.arrows(
+            row["x_start"], row["y_start"], row["x_end"], row["y_end"],
+            color=color, width=1.55, headwidth=2.25, headlength=2.25,
+            ax=ax_pitch, zorder=3, alpha=alpha,
+        )
+
+        if has_vid:
+            pitch.scatter(
+                row["x_start"], row["y_start"],
+                s=95, marker="o", facecolors="none",
+                edgecolors="#FFD54F", linewidths=2.0, ax=ax_pitch, zorder=4,
+            )
+
+        pitch.scatter(
+            row["x_start"], row["y_start"],
+            s=START_DOT_SIZE, marker="o", color=color,
+            edgecolors="white", linewidths=0.8, ax=ax_pitch, zorder=5, alpha=alpha,
+        )
+
+    ax_pitch.set_title(f"Pass Map — {selected_match}", fontsize=13)
+
+    legend_elements = [
+        Line2D([0], [0], color=COLOR_SUCCESS, lw=2.5, alpha=0.25, label="Successful Pass"),
+        Line2D([0], [0], color=COLOR_FAIL, lw=2.5, label="Unsuccessful Pass"),
+        Line2D([0], [0], color=COLOR_PROGRESSIVE, lw=2.5, label="Progressive Pass"),
+        Line2D([0], [0], color=COLOR_SWITCH, lw=2.5, label="Switch Pass"),
+        Line2D([0], [0], marker="o", color="w", markerfacecolor="gray",
+               markeredgecolor="white", markersize=6, label="Start point"),
+        Line2D([0], [0], marker="o", color="w", markerfacecolor="gray",
+               markeredgecolor="#FFD54F", markeredgewidth=2, markersize=7, label="Has video"),
+    ]
+    ax_pitch.legend(
+        handles=legend_elements, loc="upper left", bbox_to_anchor=(0.01, 0.99),
+        frameon=True, facecolor="white", edgecolor="#cccccc", shadow=False,
+        fontsize="x-small", labelspacing=0.5, borderpad=0.5,
+    )
+
+    fig.suptitle("Pass Map Dashboard", fontsize=16, y=0.99)
+    fig.tight_layout(rect=[0, 0, 1, 0.97])
+
+    pdf_buffer = BytesIO()
+    with PdfPages(pdf_buffer) as pdf:
+        pdf.savefig(fig, bbox_inches="tight")
+    plt.close(fig)
+    pdf_buffer.seek(0)
+    return pdf_buffer.getvalue()
 
 
 # ==========================
@@ -634,3 +757,12 @@ with col_right:
                 st.error(f"Video file not found: {selected_pass['video']}")
         else:
             st.warning("No video is attached to this event.")
+
+    st.divider()
+    pdf_bytes = generate_dashboard_pdf_bytes(df, stats, selected_match)
+    st.download_button(
+        label="📄 Baixar PDF (Paisagem)",
+        data=pdf_bytes,
+        file_name=f"pass_map_dashboard_{selected_match.replace(' ', '_').lower()}.pdf",
+        mime="application/pdf",
+    )
