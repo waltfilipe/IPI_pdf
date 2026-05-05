@@ -568,6 +568,22 @@ def generate_dashboard_pdf_bytes(df: pd.DataFrame, stats: dict, selected_match: 
 # ==========================
 # Sidebar
 # ==========================
+logo_url = "https://github.com/waltfilipe/IPI_pdf/blob/main/Logo_SGA_Completa_Horizontal_Branco%20(1).png?raw=true"
+
+st.sidebar.markdown(
+    f"""
+    <div style="display: flex; justify-content: center; margin-top: 6px; margin-bottom: 14px;">
+        <img src="{logo_url}" alt="Logo SGA" style="width: 200px; height: auto;" />
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+st.sidebar.header("Match Selection")
+selected_match = st.sidebar.radio(
+    "Choose the match", list(full_data.keys()), index=0
+)
+
 st.sidebar.header("Match Selection")
 selected_match = st.sidebar.radio(
     "Choose the match", list(full_data.keys()), index=0
