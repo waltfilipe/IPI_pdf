@@ -36,10 +36,10 @@ GOAL_Y = 40
 LANE_LEFT_MIN = 53.33
 LANE_RIGHT_MAX = 26.67
 
-COLOR_SUCCESS = "#B0B0B0"
-COLOR_FAIL = "#D45B5B"
+COLOR_SUCCESS    = "#B0B0B0"
+COLOR_FAIL       = "#D45B5B"
 COLOR_PROGRESSIVE = "#2F80ED"
-COLOR_SWITCH = "#DAA520"
+COLOR_SWITCH     = "#DAA520"
 
 # ==========================
 # DATA
@@ -197,8 +197,8 @@ def is_switch_pass(x_start, y_start, y_end) -> bool:
     if x_start >= FINAL_THIRD_LINE_X:
         return False
     lane_start = get_lane(y_start)
-    lane_end = get_lane(y_end)
-    return (lane_start == "left" and lane_end == "right") or \
+    lane_end   = get_lane(y_end)
+    return (lane_start == "left"  and lane_end == "right") or \
            (lane_start == "right" and lane_end == "left")
 
 
@@ -206,7 +206,7 @@ def is_progressive_pass(x_start, y_start, x_end, y_end) -> bool:
     if x_start < 35:
         return False
     start_dist = distance_to_goal(x_start, y_start)
-    end_dist = distance_to_goal(x_end, y_end)
+    end_dist   = distance_to_goal(x_end,   y_end)
     if start_dist == 0:
         return False
     return (start_dist - end_dist) / start_dist >= 0.25
@@ -244,9 +244,9 @@ full_data.update(dfs_by_match)
 # ==========================
 def compute_stats(df: pd.DataFrame) -> dict:
     total_passes = len(df)
-    successful = int(df["is_won"].sum())
+    successful   = int(df["is_won"].sum())
     unsuccessful = total_passes - successful
-    accuracy = (successful / total_passes * 100.0) if total_passes else 0.0
+    accuracy     = (successful / total_passes * 100.0) if total_passes else 0.0
 
     progressive_total = int(df["progressive"].sum())
     progressive_unsuccessful = int(
@@ -257,15 +257,15 @@ def compute_stats(df: pd.DataFrame) -> dict:
         )).sum()
     )
     progressive_attempted = progressive_total + progressive_unsuccessful
-    progressive_accuracy = (
+    progressive_accuracy  = (
         progressive_total / progressive_attempted * 100.0
         if progressive_attempted else 0.0
     )
 
     key_passes = int(df["video"].apply(has_video_value).sum())
 
-    to_final_third = (df["x_start"] < FINAL_THIRD_LINE_X) & (df["x_end"] >= FINAL_THIRD_LINE_X)
-    to_final_third_total = int(to_final_third.sum())
+    to_final_third         = (df["x_start"] < FINAL_THIRD_LINE_X) & (df["x_end"] >= FINAL_THIRD_LINE_X)
+    to_final_third_total   = int(to_final_third.sum())
     to_final_third_success = int((to_final_third & df["is_won"]).sum())
     to_final_third_accuracy = (
         to_final_third_success / to_final_third_total * 100.0
@@ -277,15 +277,15 @@ def compute_stats(df: pd.DataFrame) -> dict:
         & (df["y_end"] >= BOX_Y_MIN)
         & (df["y_end"] <= BOX_Y_MAX)
     )
-    box_total = int(to_box.sum())
-    box_success = int((to_box & df["is_won"]).sum())
+    box_total    = int(to_box.sum())
+    box_success  = int((to_box & df["is_won"]).sum())
     box_unsuccess = box_total - box_success
     box_accuracy = (box_success / box_total * 100.0) if box_total else 0.0
 
-    switch_total = int(df["switch"].sum())
-    switch_success = int((df["switch"] & df["is_won"]).sum())
-    switch_unsuccess = switch_total - switch_success
-    switch_accuracy = (switch_success / switch_total * 100.0) if switch_total else 0.0
+    switch_total       = int(df["switch"].sum())
+    switch_success     = int((df["switch"] & df["is_won"]).sum())
+    switch_unsuccess   = switch_total - switch_success
+    switch_accuracy    = (switch_success / switch_total * 100.0) if switch_total else 0.0
     switch_pct_of_total = (switch_total / total_passes * 100.0) if total_passes else 0.0
 
     return {
@@ -320,9 +320,7 @@ FIG_DPI = 110
 
 
 def _plot_passes_on_pitch(df: pd.DataFrame, pitch: Pitch, ax):
-    """Desenha setas e pontos no eixo recebido. Reutilizado na tela e no PDF."""
     ax.axvline(x=FINAL_THIRD_LINE_X, color="#FFD54F", linewidth=1.2, alpha=0.25)
-
     for _, row in df.iterrows():
         is_lost = not row["is_won"]
         is_sw   = bool(row["switch"])
@@ -360,19 +358,18 @@ def _plot_passes_on_pitch(df: pd.DataFrame, pitch: Pitch, ax):
 
 def _legend_elements():
     return [
-        Line2D([0], [0], color=COLOR_SUCCESS,     lw=2.5, alpha=0.6,  label="Successful Pass"),
-        Line2D([0], [0], color=COLOR_FAIL,        lw=2.5,             label="Unsuccessful Pass"),
-        Line2D([0], [0], color=COLOR_PROGRESSIVE, lw=2.5,             label="Progressive Pass"),
-        Line2D([0], [0], color=COLOR_SWITCH,      lw=2.5,             label="Switch Pass"),
+        Line2D([0], [0], color=COLOR_SUCCESS,      lw=2.5, alpha=0.6,  label="Successful Pass"),
+        Line2D([0], [0], color=COLOR_FAIL,         lw=2.5,             label="Unsuccessful Pass"),
+        Line2D([0], [0], color=COLOR_PROGRESSIVE,  lw=2.5,             label="Progressive Pass"),
+        Line2D([0], [0], color=COLOR_SWITCH,       lw=2.5,             label="Switch Pass"),
         Line2D([0], [0], marker="o", color="w", markerfacecolor="gray",
-               markeredgecolor="white", markersize=6,                  label="Start point (click)"),
+               markeredgecolor="white", markersize=6,                   label="Start point (click)"),
         Line2D([0], [0], marker="o", color="w", markerfacecolor="gray",
                markeredgecolor="#FFD54F", markeredgewidth=2, markersize=7, label="Has video"),
     ]
 
 
 def draw_pass_map(df: pd.DataFrame, title: str):
-    """Versão para a tela — retorna img PIL, ax e fig."""
     pitch = Pitch(pitch_type="statsbomb", pitch_color="#f5f5f5", line_color="#4a4a4a")
     fig, ax = pitch.draw(figsize=(FIG_W, FIG_H))
     fig.set_dpi(FIG_DPI)
@@ -420,7 +417,6 @@ def generate_pdf(df: pd.DataFrame, stats: dict, match_name: str, pass_filter: st
             left=0.02, right=0.98, top=0.87, bottom=0.06,
         )
 
-        # Cabeçalho
         fig.text(0.5, 0.955, "Pass Map Dashboard",
                  ha="center", fontsize=20, fontweight="bold", color="#1a1a1a")
         fig.text(
@@ -429,13 +425,12 @@ def generate_pdf(df: pd.DataFrame, stats: dict, match_name: str, pass_filter: st
             ha="center", fontsize=11, color="#555555",
         )
 
-        # ── Coluna esquerda: estatísticas ────────────────────────────────
+        # Coluna esquerda: stats
         ax_s = fig.add_subplot(gs[0])
         ax_s.set_xlim(0, 1)
         ax_s.set_ylim(0, 1)
         ax_s.axis("off")
 
-        # Cabeçalho das colunas de valor
         for xpos, lbl in zip([0.62, 0.79, 0.97], ["Total", "Succ.", "Acc."]):
             ax_s.text(xpos, 0.975, lbl, fontsize=7.5, color="#888888",
                       ha="right", va="top", transform=ax_s.transAxes)
@@ -459,50 +454,42 @@ def generate_pdf(df: pd.DataFrame, stats: dict, match_name: str, pass_filter: st
                                 fontweight="bold", color="#1a1a1a",
                                 ha="right", va="top", transform=ax.transAxes)
                 y -= step
-        
-            # ← linha separadora: usa ax.plot com transform em vez de axhline
             line_y = y + step * 0.35
             ax.plot([0.01, 0.99], [line_y, line_y],
                     color="#dddddd", linewidth=0.8,
                     transform=ax.transAxes)
-        
             return y - 0.01
+
         y = 0.945
         y = _block(ax_s, y, "Overall", [
             ("Total / Successful / Accuracy",
-             stats["total_passes"],
-             stats["successful_passes"],
+             stats["total_passes"], stats["successful_passes"],
              f'{stats["accuracy_pct"]:.1f}%'),
             ("Unsuccessful", stats["unsuccessful_passes"]),
         ])
         y = _block(ax_s, y, "Progressive Passes", [
             ("Attempted / Successful / Accuracy",
-             stats["progressive_attempted"],
-             stats["progressive_successful"],
+             stats["progressive_attempted"], stats["progressive_successful"],
              f'{stats["progressive_accuracy_pct"]:.1f}%'),
         ])
         y = _block(ax_s, y, "To the Final Third", [
             ("Total / Successful / Accuracy",
-             stats["to_final_third_total"],
-             stats["to_final_third_success"],
+             stats["to_final_third_total"], stats["to_final_third_success"],
              f'{stats["to_final_third_accuracy_pct"]:.1f}%'),
         ])
         y = _block(ax_s, y, "Passes Into the Box", [
             ("Total / Successful / Accuracy",
-             stats["box_total"],
-             stats["box_success"],
+             stats["box_total"], stats["box_success"],
              f'{stats["box_accuracy_pct"]:.1f}%'),
         ])
         _block(ax_s, y, "Switch Passes", [
             ("Total / Successful / Accuracy",
-             stats["switch_total"],
-             stats["switch_success"],
+             stats["switch_total"], stats["switch_success"],
              f'{stats["switch_accuracy_pct"]:.1f}%'),
             ("% of Total Passes", f'{stats["switch_pct_of_total"]:.1f}%'),
         ])
 
-        # ── Coluna direita: pitch ────────────────────────────────────────
-        # Pega a posição do subplot direito e cria o pitch nela
+        # Coluna direita: pitch
         ax_dummy = fig.add_subplot(gs[1])
         ax_dummy.axis("off")
         pos = ax_dummy.get_position()
@@ -510,10 +497,8 @@ def generate_pdf(df: pd.DataFrame, stats: dict, match_name: str, pass_filter: st
         pitch = Pitch(pitch_type="statsbomb", pitch_color="#f5f5f5", line_color="#4a4a4a")
         ax_p = fig.add_axes(pos)
         pitch.draw(ax=ax_p)
-
         _plot_passes_on_pitch(df, pitch, ax_p)
         ax_p.set_title(f"Pass Map — {match_name}", fontsize=12, pad=6)
-
         ax_p.legend(
             handles=_legend_elements(), loc="upper left",
             bbox_to_anchor=(0.01, 0.99), frameon=True,
@@ -537,14 +522,11 @@ def generate_pdf(df: pd.DataFrame, stats: dict, match_name: str, pass_filter: st
                       "x_end", "y_end", "Progressive", "Switch"]
         table_data = [
             [
-                str(int(r["number"])),
-                r["type"],
-                f'{r["x_start"]:.2f}',
-                f'{r["y_start"]:.2f}',
-                f'{r["x_end"]:.2f}',
-                f'{r["y_end"]:.2f}',
+                str(int(r["number"])), r["type"],
+                f'{r["x_start"]:.2f}', f'{r["y_start"]:.2f}',
+                f'{r["x_end"]:.2f}',   f'{r["y_end"]:.2f}',
                 "Yes" if r["progressive"] else "No",
-                "Yes" if r["switch"] else "No",
+                "Yes" if r["switch"]      else "No",
             ]
             for _, r in df.iterrows()
         ]
@@ -558,22 +540,17 @@ def generate_pdf(df: pd.DataFrame, stats: dict, match_name: str, pass_filter: st
         for page_num, chunk in enumerate(chunks):
             fig2, ax2 = plt.subplots(figsize=(16, 9), facecolor="white")
             ax2.axis("off")
-
             suffix = (
                 f"  (page {page_num + 1}/{len(chunks)})"
                 if len(chunks) > 1 else ""
             )
-            fig2.text(
-                0.5, 0.96,
-                f"Pass List — {match_name} / {pass_filter}{suffix}",
-                ha="center", fontsize=13, fontweight="bold", color="#1a1a1a",
-            )
+            fig2.text(0.5, 0.96,
+                      f"Pass List — {match_name} / {pass_filter}{suffix}",
+                      ha="center", fontsize=13, fontweight="bold", color="#1a1a1a")
 
             tbl = ax2.table(
-                cellText=chunk,
-                colLabels=col_labels,
-                loc="center",
-                cellLoc="center",
+                cellText=chunk, colLabels=col_labels,
+                loc="center", cellLoc="center",
             )
             tbl.auto_set_font_size(False)
             tbl.set_fontsize(8.5)
@@ -650,48 +627,59 @@ st.caption("Click the start dot to select the pass event.")
 # ==========================
 col_stats, col_right = st.columns([1, 2], gap="large")
 
+# ── Coluna esquerda: stats em tabela compacta ────────────────────────────────
 with col_stats:
     st.subheader("Statistics")
 
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Total Passes", stats["total_passes"])
-    c2.metric("Successful", stats["successful_passes"])
-    c3.metric("Accuracy", f'{stats["accuracy_pct"]:.1f}%')
+    section_colors = {
+        "Overall":       "#e8f4fd",
+        "Progressive":   "#e8f8e8",
+        "Final Third":   "#fff8e1",
+        "Into the Box":  "#fde8e8",
+        "Switch Passes": "#f3e8fd",
+    }
 
-    st.divider()
+    stats_rows = [
+        ("Overall",        "Total Passes",  stats["total_passes"]),
+        ("Overall",        "Successful",    stats["successful_passes"]),
+        ("Overall",        "Unsuccessful",  stats["unsuccessful_passes"]),
+        ("Overall",        "Accuracy",      f'{stats["accuracy_pct"]:.1f}%'),
+        ("Progressive",    "Attempted",     stats["progressive_attempted"]),
+        ("Progressive",    "Successful",    stats["progressive_successful"]),
+        ("Progressive",    "Accuracy",      f'{stats["progressive_accuracy_pct"]:.1f}%'),
+        ("Final Third",    "Total",         stats["to_final_third_total"]),
+        ("Final Third",    "Successful",    stats["to_final_third_success"]),
+        ("Final Third",    "Accuracy",      f'{stats["to_final_third_accuracy_pct"]:.1f}%'),
+        ("Into the Box",   "Total",         stats["box_total"]),
+        ("Into the Box",   "Successful",    stats["box_success"]),
+        ("Into the Box",   "Accuracy",      f'{stats["box_accuracy_pct"]:.1f}%'),
+        ("Switch Passes",  "Total",         stats["switch_total"]),
+        ("Switch Passes",  "Successful",    stats["switch_success"]),
+        ("Switch Passes",  "Accuracy",      f'{stats["switch_accuracy_pct"]:.1f}%'),
+        ("Switch Passes",  "% of Total",    f'{stats["switch_pct_of_total"]:.1f}%'),
+    ]
 
-    st.subheader("Progressive Passes")
-    p1, p2, p3 = st.columns(3)
-    p1.metric("Total", stats["progressive_attempted"])
-    p2.metric("Successful", stats["progressive_successful"])
-    p3.metric("Accuracy", f'{stats["progressive_accuracy_pct"]:.1f}%')
+    df_stats = pd.DataFrame(stats_rows, columns=["Section", "Metric", "Value"])
 
-    st.divider()
+    def style_stats(df):
+        styles = []
+        for _, row in df.iterrows():
+            color = section_colors.get(row["Section"], "#ffffff")
+            styles.append([
+                f"background-color: {color}",
+                f"background-color: {color}",
+                f"background-color: {color}; font-weight: bold",
+            ])
+        return pd.DataFrame(styles, columns=df.columns, index=df.index)
 
-    st.subheader("To the Final Third")
-    c7, c8, c9 = st.columns(3)
-    c7.metric("Total", stats["to_final_third_total"])
-    c8.metric("Successful", stats["to_final_third_success"])
-    c9.metric("Accuracy", f'{stats["to_final_third_accuracy_pct"]:.1f}%')
+    st.dataframe(
+        df_stats.style.apply(style_stats, axis=None),
+        use_container_width=True,
+        hide_index=True,
+        height=632,   # mostra todas as 17 linhas sem scroll interno
+    )
 
-    st.divider()
-
-    st.subheader("Passes Into the Box")
-    d1, d2, d3 = st.columns(3)
-    d1.metric("Total", stats["box_total"])
-    d2.metric("Successful", stats["box_success"])
-    d3.metric("Accuracy", f'{stats["box_accuracy_pct"]:.1f}%')
-
-    st.divider()
-
-    st.subheader("Switch Passes")
-    s1, s2 = st.columns(2)
-    s1.metric("Total", stats["switch_total"])
-    s2.metric("Successful", stats["switch_success"])
-    sw1, sw2 = st.columns(2)
-    sw1.metric("Accuracy", f'{stats["switch_accuracy_pct"]:.1f}%')
-    sw2.metric("% of Total Passes", f'{stats["switch_pct_of_total"]:.1f}%')
-
+# ── Coluna direita: pitch + clip ─────────────────────────────────────────────
 with col_right:
     st.subheader("Pass Map")
 
@@ -707,8 +695,8 @@ with col_right:
         disp_w = click["width"]
         disp_h = click["height"]
 
-        pixel_x   = click["x"] * (real_w / disp_w)
-        pixel_y   = click["y"] * (real_h / disp_h)
+        pixel_x     = click["x"] * (real_w / disp_w)
+        pixel_y     = click["y"] * (real_h / disp_h)
         mpl_pixel_y = real_h - pixel_y
 
         field_x, field_y = ax.transData.inverted().transform((pixel_x, mpl_pixel_y))
@@ -719,11 +707,11 @@ with col_right:
             + (df_sel["y_start"] - field_y) ** 2
         )
 
-        RADIUS = 5.0
+        RADIUS     = 5.0
         candidates = df_sel[df_sel["dist"] < RADIUS].copy()
 
         if not candidates.empty:
-            candidates = candidates.sort_values("dist")
+            candidates    = candidates.sort_values("dist")
             selected_pass = candidates.iloc[0]
 
     plt.close(fig)
