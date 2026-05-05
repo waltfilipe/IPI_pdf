@@ -20,15 +20,8 @@ st.set_page_config(layout="wide", page_title="Pass Map Dashboard (Interactive)")
 # ==========================
 # Configuration
 # ==========================
-logo_url = "https://github.com/waltfilipe/IPI_pdf/blob/main/Logo_SGA_Completa_Horizontal_Branco%20(1).png?raw=true"
-
 st.markdown(
-    f"""
-    <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 0.2rem;">
-        <img src="{logo_url}" alt="Logo SGA" style="height: 42px; width: auto;" />
-        <h1 style="margin: 0; font-size: 30px;">Pass Map Dashboard</h1>
-    </div>
-    """,
+    "<h1 style='margin-bottom: 0.2rem; font-size: 30px;'>Pass Map Dashboard</h1>",
     unsafe_allow_html=True
 )
 
