@@ -490,44 +490,91 @@ col_stats, col_right = st.columns([1, 2], gap="large")
 with col_stats:
     st.subheader("Statistics")
 
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Total Passes", stats["total_passes"])
-    c2.metric("Successful", stats["successful_passes"])
-    c3.metric("Accuracy", f'{stats["accuracy_pct"]:.1f}%')
+    compact_stats_html = f"""
+    <style>
+        .stat-box {{
+            background-color: #f8f9fa;
+            border-radius: 6px;
+            padding: 8px 12px;
+            margin-bottom: 10px;
+            border: 1px solid #e9ecef;
+        }}
+        .stat-title {{
+            font-weight: 600;
+            font-size: 14px;
+            color: #343a40;
+            margin-bottom: 6px;
+            border-bottom: 1px solid #dee2e6;
+            padding-bottom: 3px;
+        }}
+        .stat-row {{
+            display: flex;
+            justify-content: space-between;
+            text-align: center;
+        }}
+        .stat-item {{
+            flex: 1;
+        }}
+        .stat-label {{
+            font-size: 11px;
+            color: #6c757d;
+            text-transform: uppercase;
+            margin-bottom: 2px;
+        }}
+        .stat-value {{
+            font-size: 15px;
+            font-weight: 700;
+            color: #212529;
+        }}
+    </style>
 
-    st.divider()
+    <div class="stat-box">
+        <div class="stat-title">General Passes</div>
+        <div class="stat-row">
+            <div class="stat-item"><div class="stat-label">Total</div><div class="stat-value">{stats['total_passes']}</div></div>
+            <div class="stat-item"><div class="stat-label">Successful</div><div class="stat-value">{stats['successful_passes']}</div></div>
+            <div class="stat-item"><div class="stat-label">Accuracy</div><div class="stat-value">{stats['accuracy_pct']}%</div></div>
+        </div>
+    </div>
 
-    st.subheader("Progressive Passes")
-    p1, p2, p3 = st.columns(3)
-    p1.metric("Total", stats["progressive_attempted"])
-    p2.metric("Successful", stats["progressive_successful"])
-    p3.metric("Accuracy", f'{stats["progressive_accuracy_pct"]:.1f}%')
+    <div class="stat-box">
+        <div class="stat-title">Progressive Passes</div>
+        <div class="stat-row">
+            <div class="stat-item"><div class="stat-label">Total</div><div class="stat-value">{stats['progressive_attempted']}</div></div>
+            <div class="stat-item"><div class="stat-label">Successful</div><div class="stat-value">{stats['progressive_successful']}</div></div>
+            <div class="stat-item"><div class="stat-label">Accuracy</div><div class="stat-value">{stats['progressive_accuracy_pct']}%</div></div>
+        </div>
+    </div>
 
-    st.divider()
+    <div class="stat-box">
+        <div class="stat-title">To the Final Third</div>
+        <div class="stat-row">
+            <div class="stat-item"><div class="stat-label">Total</div><div class="stat-value">{stats['to_final_third_total']}</div></div>
+            <div class="stat-item"><div class="stat-label">Successful</div><div class="stat-value">{stats['to_final_third_success']}</div></div>
+            <div class="stat-item"><div class="stat-label">Accuracy</div><div class="stat-value">{stats['to_final_third_accuracy_pct']}%</div></div>
+        </div>
+    </div>
 
-    st.subheader("To the Final Third")
-    c7, c8, c9 = st.columns(3)
-    c7.metric("Total", stats["to_final_third_total"])
-    c8.metric("Successful", stats["to_final_third_success"])
-    c9.metric("Accuracy", f'{stats["to_final_third_accuracy_pct"]:.1f}%')
+    <div class="stat-box">
+        <div class="stat-title">Passes Into the Box</div>
+        <div class="stat-row">
+            <div class="stat-item"><div class="stat-label">Total</div><div class="stat-value">{stats['box_total']}</div></div>
+            <div class="stat-item"><div class="stat-label">Successful</div><div class="stat-value">{stats['box_success']}</div></div>
+            <div class="stat-item"><div class="stat-label">Accuracy</div><div class="stat-value">{stats['box_accuracy_pct']}%</div></div>
+        </div>
+    </div>
 
-    st.divider()
-
-    st.subheader("Passes Into the Box")
-    d1, d2, d3 = st.columns(3)
-    d1.metric("Total", stats["box_total"])
-    d2.metric("Successful", stats["box_success"])
-    d3.metric("Accuracy", f'{stats["box_accuracy_pct"]:.1f}%')
-
-    st.divider()
-
-    st.subheader("Switch Passes")
-    s1, s2 = st.columns(2)
-    s1.metric("Total", stats["switch_total"])
-    s2.metric("Successful", stats["switch_success"])
-    sw1, sw2 = st.columns(2)
-    sw1.metric("Accuracy", f'{stats["switch_accuracy_pct"]:.1f}%')
-    sw2.metric("% of Total Passes", f'{stats["switch_pct_of_total"]:.1f}%')
+    <div class="stat-box">
+        <div class="stat-title">Switch Passes</div>
+        <div class="stat-row">
+            <div class="stat-item"><div class="stat-label">Total</div><div class="stat-value">{stats['switch_total']}</div></div>
+            <div class="stat-item"><div class="stat-label">Successful</div><div class="stat-value">{stats['switch_success']}</div></div>
+            <div class="stat-item"><div class="stat-label">Accuracy</div><div class="stat-value">{stats['switch_accuracy_pct']}%</div></div>
+            <div class="stat-item"><div class="stat-label">% Total</div><div class="stat-value">{stats['switch_pct_of_total']}%</div></div>
+        </div>
+    </div>
+    """
+    st.markdown(compact_stats_html, unsafe_allow_html=True)
 
 with col_right:
     st.subheader("Pass Map")
