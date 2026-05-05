@@ -478,11 +478,6 @@ elif pass_filter == "Switch Only":
 stats = compute_stats(df)
 
 # ==========================
-# Caption
-# ==========================
-st.caption("Click the start dot to select the pass event.")
-
-# ==========================
 # Layout
 # ==========================
 col_stats, col_right = st.columns([1, 2], gap="large")
@@ -493,19 +488,20 @@ with col_stats:
     compact_stats_html = f"""
     <style>
         .stat-box {{
-            background-color: #f8f9fa;
+            background-color: #262730;
             border-radius: 6px;
             padding: 8px 12px;
             margin-bottom: 10px;
-            border: 1px solid #e9ecef;
+            border: 1px solid #343746;
         }}
         .stat-title {{
             font-weight: 600;
-            font-size: 14px;
-            color: #343a40;
+            font-size: 12px;
+            color: #E6EAF0;
             margin-bottom: 6px;
-            border-bottom: 1px solid #dee2e6;
+            border-bottom: 1px solid #3C4152;
             padding-bottom: 3px;
+            text-align: center;
         }}
         .stat-row {{
             display: flex;
@@ -517,14 +513,14 @@ with col_stats:
         }}
         .stat-label {{
             font-size: 11px;
-            color: #6c757d;
+            color: #C9CED6;
             text-transform: uppercase;
             margin-bottom: 2px;
         }}
         .stat-value {{
             font-size: 15px;
             font-weight: 700;
-            color: #212529;
+            color: #F1F3F5;
         }}
     </style>
 
