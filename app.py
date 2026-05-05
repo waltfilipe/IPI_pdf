@@ -459,12 +459,14 @@ def generate_pdf(df: pd.DataFrame, stats: dict, match_name: str, pass_filter: st
                                 fontweight="bold", color="#1a1a1a",
                                 ha="right", va="top", transform=ax.transAxes)
                 y -= step
-            # linha separadora
-            ax.axhline(y=y + step * 0.35, xmin=0.01, xmax=0.99,
-                       color="#dddddd", linewidth=0.8,
-                       transform=ax.transAxes)
+        
+            # ← linha separadora: usa ax.plot com transform em vez de axhline
+            line_y = y + step * 0.35
+            ax.plot([0.01, 0.99], [line_y, line_y],
+                    color="#dddddd", linewidth=0.8,
+                    transform=ax.transAxes)
+        
             return y - 0.01
-
         y = 0.945
         y = _block(ax_s, y, "Overall", [
             ("Total / Successful / Accuracy",
