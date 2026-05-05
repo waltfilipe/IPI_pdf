@@ -10,6 +10,9 @@ from io import BytesIO
 from matplotlib.lines import Line2D
 from matplotlib.patches import FancyArrowPatch
 from streamlit_image_coordinates import streamlit_image_coordinates
+import tempfile
+from datetime import date
+from fpdf import FPDF, XPos, YPos
 
 # ==========================
 # Page Configuration
@@ -440,6 +443,121 @@ def draw_pass_map(df: pd.DataFrame, title: str):
 
 
 # ==========================
+# PDF Export
+# ==========================
+@st.cache_data
+def generate_pdf(df: pd.DataFrame, stats: dict, img_obj, match_name: str, pass_filter: str) -> bytes:
+    """Generate a PDF report and return it as bytes."""
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+
+    # ---- Header ----
+    pdf.set_font("Helvetica", "B", 18)
+    pdf.cell(0, 10, "Pass Map Dashboard", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align="C")
+    pdf.set_font("Helvetica", "", 12)
+    pdf.cell(0, 7, f"Match: {match_name}", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align="C")
+    pdf.cell(0, 7, f"Filter: {pass_filter}", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align="C")
+    pdf.cell(0, 7, f"Generated: {date.today().strftime('%Y-%m-%d')}", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align="C")
+    pdf.ln(4)
+
+    # ---- Statistics ----
+    pdf.set_font("Helvetica", "B", 13)
+    pdf.cell(0, 8, "Statistics", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_draw_color(180, 180, 180)
+    pdf.line(pdf.get_x(), pdf.get_y(), pdf.get_x() + 190, pdf.get_y())
+    pdf.ln(2)
+
+    col_w = [75, 38, 38, 38]
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.set_fill_color(230, 230, 230)
+    for text, w in zip(["Category", "Total / Attempted", "Successful", "Accuracy / %Total"], col_w):
+        pdf.cell(w, 7, text, border=1, fill=True, align="C")
+    pdf.ln()
+
+    rows_data = [
+        ("Overall Passes",
+         str(stats["total_passes"]),
+         str(stats["successful_passes"]),
+         f'{stats["accuracy_pct"]:.1f}%'),
+        ("Progressive Passes",
+         str(stats["progressive_attempted"]),
+         str(stats["progressive_successful"]),
+         f'{stats["progressive_accuracy_pct"]:.1f}%'),
+        ("To the Final Third",
+         str(stats["to_final_third_total"]),
+         str(stats["to_final_third_success"]),
+         f'{stats["to_final_third_accuracy_pct"]:.1f}%'),
+        ("Passes Into the Box",
+         str(stats["box_total"]),
+         str(stats["box_success"]),
+         f'{stats["box_accuracy_pct"]:.1f}%'),
+        ("Switch Passes",
+         str(stats["switch_total"]),
+         str(stats["switch_success"]),
+         f'{stats["switch_accuracy_pct"]:.1f}% / {stats["switch_pct_of_total"]:.1f}%'),
+    ]
+
+    pdf.set_font("Helvetica", "", 10)
+    fill = False
+    for row in rows_data:
+        pdf.set_fill_color(245, 245, 245) if fill else pdf.set_fill_color(255, 255, 255)
+        for text, w in zip(row, col_w):
+            pdf.cell(w, 6, text, border=1, fill=True, align="C")
+        pdf.ln()
+        fill = not fill
+
+    pdf.ln(4)
+
+    # ---- Pass Map Image ----
+    pdf.set_font("Helvetica", "B", 13)
+    pdf.cell(0, 8, "Pass Map", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.line(pdf.get_x(), pdf.get_y(), pdf.get_x() + 190, pdf.get_y())
+    pdf.ln(2)
+
+    with tempfile.NamedTemporaryFile(suffix=".png") as tmp:
+        img_obj.save(tmp.name, format="PNG")
+        pdf.image(tmp.name, x=10, w=190)
+
+    pdf.ln(4)
+
+    # ---- Pass List Table ----
+    pdf.set_font("Helvetica", "B", 13)
+    pdf.cell(0, 8, "Pass List", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.line(pdf.get_x(), pdf.get_y(), pdf.get_x() + 190, pdf.get_y())
+    pdf.ln(2)
+
+    pass_col_w = [10, 30, 22, 22, 22, 22, 24, 20]
+    pass_headers = ["#", "Type", "x_start", "y_start", "x_end", "y_end", "Progressive", "Switch"]
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.set_fill_color(230, 230, 230)
+    for text, w in zip(pass_headers, pass_col_w):
+        pdf.cell(w, 7, text, border=1, fill=True, align="C")
+    pdf.ln()
+
+    pdf.set_font("Helvetica", "", 8)
+    fill = False
+    for _, row in df.iterrows():
+        pdf.set_fill_color(245, 245, 245) if fill else pdf.set_fill_color(255, 255, 255)
+        values = [
+            str(int(row["number"])),
+            row["type"],
+            f'{row["x_start"]:.2f}',
+            f'{row["y_start"]:.2f}',
+            f'{row["x_end"]:.2f}',
+            f'{row["y_end"]:.2f}',
+            "Yes" if row["progressive"] else "No",
+            "Yes" if row["switch"] else "No",
+        ]
+        for text, w in zip(values, pass_col_w):
+            pdf.cell(w, 5, text, border=1, fill=True, align="C")
+        pdf.ln()
+        fill = not fill
+
+    return bytes(pdf.output())
+
+
+# ==========================
 # Sidebar
 # ==========================
 st.sidebar.header("Match Selection")
@@ -476,6 +594,19 @@ elif pass_filter == "Switch Only":
     df = df[df["switch"]].reset_index(drop=True)
 
 stats = compute_stats(df)
+
+# ---- PDF Export ----
+st.sidebar.header("Export")
+_pdf_filename = f"pass_map_{selected_match}_{pass_filter}.pdf".replace(" ", "_")
+_img_for_pdf, _ax_for_pdf, _fig_for_pdf = draw_pass_map(df, title=f"Pass Map — {selected_match}")
+_pdf_bytes = generate_pdf(df, stats, _img_for_pdf, selected_match, pass_filter)
+plt.close(_fig_for_pdf)
+st.sidebar.download_button(
+    label="📄 Export to PDF",
+    data=_pdf_bytes,
+    file_name=_pdf_filename,
+    mime="application/pdf",
+)
 
 # ==========================
 # Caption
