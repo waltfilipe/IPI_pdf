@@ -460,237 +460,182 @@ elif pass_filter == "Switch Only":
 
 stats = compute_stats(df)
 
+
 # ==========================
-# Stats card builder  (self-contained HTML + CSS)
+# Stats panel HTML builder
 # ==========================
-CSS = """
+def build_stats_html(stats: dict) -> str:
+
+    def card(title: str, rows: list) -> str:
+        """
+        rows: list of (label, value) tuples.
+        The last row is always Accuracy and gets a subtle progress bar.
+        """
+        rows_html = ""
+        for i, (label, value) in enumerate(rows):
+            is_last = i == len(rows) - 1
+            divider = "" if i == 0 else '<div class="row-divider"></div>'
+            accent_class = "row-accent" if is_last else ""
+            rows_html += f"""
+            {divider}
+            <div class="stat-row {accent_class}">
+              <span class="stat-label">{label}</span>
+              <span class="stat-value">{value}</span>
+            </div>"""
+
+        # Progress bar using the last value (accuracy)
+        try:
+            pct = float(str(rows[-1][1]).replace("%", "").strip())
+        except ValueError:
+            pct = 0.0
+        pct = max(0.0, min(100.0, pct))
+
+        return f"""
+        <div class="card">
+          <div class="card-title">{title}</div>
+          <div class="card-body">
+            {rows_html}
+          </div>
+          <div class="bar-track">
+            <div class="bar-fill" style="width:{pct:.1f}%"></div>
+          </div>
+        </div>"""
+
+    cards_html = ""
+
+    cards_html += card("General Passes", [
+        ("Total",       stats["total_passes"]),
+        ("Successful",  stats["successful_passes"]),
+        ("Unsuccessful",stats["unsuccessful_passes"]),
+        ("Accuracy",    f"{stats['accuracy_pct']:.1f}%"),
+    ])
+
+    cards_html += card("Progressive Passes", [
+        ("Attempted",   stats["progressive_attempted"]),
+        ("Successful",  stats["progressive_successful"]),
+        ("Accuracy",    f"{stats['progressive_accuracy_pct']:.1f}%"),
+    ])
+
+    cards_html += card("To the Final Third", [
+        ("Total",       stats["to_final_third_total"]),
+        ("Successful",  stats["to_final_third_success"]),
+        ("Accuracy",    f"{stats['to_final_third_accuracy_pct']:.1f}%"),
+    ])
+
+    cards_html += card("Passes Into the Box", [
+        ("Total",       stats["box_total"]),
+        ("Successful",  stats["box_success"]),
+        ("Unsuccessful",stats["box_unsuccess"]),
+        ("Accuracy",    f"{stats['box_accuracy_pct']:.1f}%"),
+    ])
+
+    cards_html += card("Switch Passes", [
+        ("Total",       stats["switch_total"]),
+        ("Successful",  stats["switch_success"]),
+        ("% of Total",  f"{stats['switch_pct_of_total']:.1f}%"),
+        ("Accuracy",    f"{stats['switch_accuracy_pct']:.1f}%"),
+    ])
+
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
 
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
 
-  body {
+  body {{
     font-family: 'Inter', sans-serif;
     background: transparent;
-    padding: 0;
-  }
+  }}
 
-  .stats-panel {
+  .panel {{
     display: flex;
     flex-direction: column;
-    gap: 9px;
-  }
+    gap: 8px;
+  }}
 
   /* ── Card ── */
-  .stat-card {
+  .card {{
     background: #ffffff;
-    border-radius: 12px;
-    border: 1px solid #e4e7ed;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
     overflow: hidden;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04);
-    transition: box-shadow 0.2s ease, transform 0.2s ease;
-  }
-  .stat-card:hover {
-    box-shadow: 0 6px 18px rgba(0,0,0,0.11);
-    transform: translateY(-1px);
-  }
+  }}
 
-  /* ── Coloured header strip ── */
-  .stat-card-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 14px;
-  }
-  .stat-card-icon { font-size: 14px; line-height: 1; }
-  .stat-card-title {
-    font-size: 10.5px;
-    font-weight: 700;
-    letter-spacing: 0.7px;
-    text-transform: uppercase;
-    color: #ffffff;
-  }
-
-  /* ── Metrics row ── */
-  .stat-card-body {
-    display: flex;
-    padding: 10px 12px 6px;
-    gap: 0;
-  }
-  .stat-metric {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    position: relative;
-    padding: 0 4px;
-  }
-  .stat-metric + .stat-metric::before {
-    content: '';
-    position: absolute;
-    left: 0; top: 8%; height: 84%;
-    width: 1px;
-    background: #edf0f5;
-  }
-  .stat-metric-value {
-    font-size: 19px;
-    font-weight: 700;
-    color: #111827;
-    line-height: 1.1;
-  }
-  .stat-metric-label {
-    font-size: 9.5px;
-    font-weight: 500;
-    color: #9ca3af;
-    text-transform: uppercase;
-    letter-spacing: 0.45px;
-    margin-top: 3px;
-    text-align: center;
-  }
-
-  /* ── Progress bar ── */
-  .stat-bar-wrap {
-    padding: 6px 14px 10px;
-  }
-  .stat-bar-bg {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .stat-bar-track {
-    flex: 1;
-    height: 5px;
-    border-radius: 99px;
-    background: #f3f4f6;
-    overflow: hidden;
-  }
-  .stat-bar-fill {
-    height: 100%;
-    border-radius: 99px;
-  }
-  .stat-bar-pct {
+  /* ── Title ── */
+  .card-title {{
     font-size: 10px;
     font-weight: 600;
-    min-width: 36px;
-    text-align: right;
-  }
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: #6b7280;
+    padding: 9px 14px 7px;
+    border-bottom: 1px solid #f3f4f6;
+  }}
 
-  /* ── Accent gradients (header) ── */
-  .h-general  { background: linear-gradient(90deg, #1e3a5f 0%, #2563a8 100%); }
-  .h-progress { background: linear-gradient(90deg, #14532d 0%, #16a34a 100%); }
-  .h-third    { background: linear-gradient(90deg, #7c2d12 0%, #ea580c 100%); }
-  .h-box      { background: linear-gradient(90deg, #7f1d1d 0%, #D45B5B 100%); }
-  .h-switch   { background: linear-gradient(90deg, #451a03 0%, #DAA520 100%); }
+  /* ── Rows ── */
+  .card-body {{
+    padding: 4px 0;
+  }}
 
-  /* ── Bar fill colours ── */
-  .b-general  { background: linear-gradient(90deg, #3b82f6, #2563a8); }
-  .b-progress { background: linear-gradient(90deg, #4ade80, #16a34a); }
-  .b-third    { background: linear-gradient(90deg, #fb923c, #ea580c); }
-  .b-box      { background: linear-gradient(90deg, #f87171, #D45B5B); }
-  .b-switch   { background: linear-gradient(90deg, #fcd34d, #DAA520); }
+  .stat-row {{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 14px;
+  }}
 
-  /* ── Bar pct text colours ── */
-  .t-general  { color: #2563a8; }
-  .t-progress { color: #16a34a; }
-  .t-third    { color: #ea580c; }
-  .t-box      { color: #D45B5B; }
-  .t-switch   { color: #b45309; }
+  .row-divider {{
+    height: 1px;
+    background: #f3f4f6;
+    margin: 0 14px;
+  }}
+
+  .stat-label {{
+    font-size: 11.5px;
+    font-weight: 400;
+    color: #6b7280;
+  }}
+
+  .stat-value {{
+    font-size: 13px;
+    font-weight: 600;
+    color: #111827;
+  }}
+
+  /* Accuracy row — slightly darker bg */
+  .row-accent {{
+    background: #f9fafb;
+  }}
+  .row-accent .stat-label {{
+    color: #374151;
+    font-weight: 500;
+  }}
+  .row-accent .stat-value {{
+    color: #111827;
+  }}
+
+  /* ── Progress bar ── */
+  .bar-track {{
+    height: 3px;
+    background: #f3f4f6;
+    overflow: hidden;
+  }}
+  .bar-fill {{
+    height: 100%;
+    background: #d1d5db;
+    border-radius: 0;
+  }}
 </style>
-"""
-
-
-def build_card(title: str, icon: str, h_cls: str, b_cls: str, t_cls: str,
-               metrics: list, accuracy_pct: float) -> str:
-    metrics_html = "".join(
-        f'<div class="stat-metric">'
-        f'  <span class="stat-metric-value">{v}</span>'
-        f'  <span class="stat-metric-label">{lbl}</span>'
-        f'</div>'
-        for lbl, v in metrics
-    )
-    pct_clamped = max(0.0, min(100.0, accuracy_pct))
-    return f"""
-    <div class="stat-card">
-      <div class="stat-card-header {h_cls}">
-        <span class="stat-card-icon">{icon}</span>
-        <span class="stat-card-title">{title}</span>
-      </div>
-      <div class="stat-card-body">{metrics_html}</div>
-      <div class="stat-bar-wrap">
-        <div class="stat-bar-bg">
-          <div class="stat-bar-track">
-            <div class="stat-bar-fill {b_cls}" style="width:{pct_clamped:.1f}%"></div>
-          </div>
-          <span class="stat-bar-pct {t_cls}">{pct_clamped:.1f}%</span>
-        </div>
-      </div>
-    </div>"""
-
-
-def build_stats_html(stats: dict) -> str:
-    cards = ""
-
-    cards += build_card(
-        title="General Passes", icon="⚽",
-        h_cls="h-general", b_cls="b-general", t_cls="t-general",
-        metrics=[
-            ("Total",       stats["total_passes"]),
-            ("Successful",  stats["successful_passes"]),
-            ("Missed",      stats["unsuccessful_passes"]),
-        ],
-        accuracy_pct=stats["accuracy_pct"],
-    )
-
-    cards += build_card(
-        title="Progressive Passes", icon="📈",
-        h_cls="h-progress", b_cls="b-progress", t_cls="t-progress",
-        metrics=[
-            ("Attempted",   stats["progressive_attempted"]),
-            ("Successful",  stats["progressive_successful"]),
-        ],
-        accuracy_pct=stats["progressive_accuracy_pct"],
-    )
-
-    cards += build_card(
-        title="To the Final Third", icon="🎯",
-        h_cls="h-third", b_cls="b-third", t_cls="t-third",
-        metrics=[
-            ("Total",       stats["to_final_third_total"]),
-            ("Successful",  stats["to_final_third_success"]),
-        ],
-        accuracy_pct=stats["to_final_third_accuracy_pct"],
-    )
-
-    cards += build_card(
-        title="Passes Into the Box", icon="📦",
-        h_cls="h-box", b_cls="b-box", t_cls="t-box",
-        metrics=[
-            ("Total",       stats["box_total"]),
-            ("Successful",  stats["box_success"]),
-            ("Missed",      stats["box_unsuccess"]),
-        ],
-        accuracy_pct=stats["box_accuracy_pct"],
-    )
-
-    cards += build_card(
-        title="Switch Passes", icon="🔀",
-        h_cls="h-switch", b_cls="b-switch", t_cls="t-switch",
-        metrics=[
-            ("Total",       stats["switch_total"]),
-            ("Successful",  stats["switch_success"]),
-            ("% of Total",  f"{stats['switch_pct_of_total']}%"),
-        ],
-        accuracy_pct=stats["switch_accuracy_pct"],
-    )
-
-    full_html = f"""<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8">{CSS}</head>
+</head>
 <body>
-  <div class="stats-panel">{cards}</div>
+  <div class="panel">
+    {cards_html}
+  </div>
 </body>
 </html>"""
-    return full_html
 
 
 # ==========================
