@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -22,21 +23,18 @@ st.set_page_config(layout="wide", page_title="Pass Map Dashboard (Interactive)")
 st.title("Pass Map Dashboard")
 
 FINAL_THIRD_LINE_X = 80
-
 BOX_X_MIN = 102
 BOX_Y_MIN = 18
 BOX_Y_MAX = 62
-
 GOAL_X = 120
 GOAL_Y = 40
-
 LANE_LEFT_MIN = 53.33
 LANE_RIGHT_MAX = 26.67
 
-COLOR_SUCCESS = "#B0B0B0"
-COLOR_FAIL = "#D45B5B"
+COLOR_SUCCESS    = "#B0B0B0"
+COLOR_FAIL       = "#D45B5B"
 COLOR_PROGRESSIVE = "#2F80ED"
-COLOR_SWITCH = "#DAA520"
+COLOR_SWITCH     = "#DAA520"
 
 # ==========================
 # DATA
@@ -176,10 +174,8 @@ matches_data = {
 def has_video_value(v) -> bool:
     return pd.notna(v) and str(v).strip() != ""
 
-
 def distance_to_goal(x, y):
     return np.sqrt((GOAL_X - x) ** 2 + (GOAL_Y - y) ** 2)
-
 
 def get_lane(y):
     if y >= LANE_LEFT_MIN:
@@ -189,54 +185,35 @@ def get_lane(y):
     else:
         return "center"
 
-
 def is_switch_pass(x_start, y_start, y_end) -> bool:
     if x_start >= FINAL_THIRD_LINE_X:
         return False
     lane_start = get_lane(y_start)
-    lane_end = get_lane(y_end)
-    if lane_start == "left" and lane_end == "right":
-        return True
-    if lane_start == "right" and lane_end == "left":
-        return True
-    return False
-
+    lane_end   = get_lane(y_end)
+    return (lane_start == "left" and lane_end == "right") or \
+           (lane_start == "right" and lane_end == "left")
 
 def is_progressive_pass(x_start, y_start, x_end, y_end) -> bool:
     if x_start < 35:
         return False
     start_dist = distance_to_goal(x_start, y_start)
-    end_dist = distance_to_goal(x_end, y_end)
+    end_dist   = distance_to_goal(x_end,   y_end)
     if start_dist == 0:
         return False
-    reduction_pct = (start_dist - end_dist) / start_dist
-    return reduction_pct >= 0.25
-
+    return (start_dist - end_dist) / start_dist >= 0.25
 
 # ==========================
 # Build DataFrames
 # ==========================
 dfs_by_match = {}
 for match_name, events in matches_data.items():
-    dfm = pd.DataFrame(
-        events,
-        columns=["type", "x_start", "y_start", "x_end", "y_end", "video"],
-    )
+    dfm = pd.DataFrame(events, columns=["type","x_start","y_start","x_end","y_end","video"])
     dfm["number"] = np.arange(1, len(dfm) + 1)
     dfm["is_won"] = dfm["type"].str.contains("WON", case=False)
-
     dfm["progressive"] = dfm.apply(
-        lambda row: row["is_won"] and is_progressive_pass(
-            row["x_start"], row["y_start"], row["x_end"], row["y_end"]
-        ),
-        axis=1,
-    )
-
+        lambda r: r["is_won"] and is_progressive_pass(r["x_start"], r["y_start"], r["x_end"], r["y_end"]), axis=1)
     dfm["switch"] = dfm.apply(
-        lambda row: is_switch_pass(row["x_start"], row["y_start"], row["y_end"]),
-        axis=1,
-    )
-
+        lambda r: is_switch_pass(r["x_start"], r["y_start"], r["y_end"]), axis=1)
     dfs_by_match[match_name] = dfm
 
 df_all = pd.concat(dfs_by_match.values(), ignore_index=True)
@@ -248,72 +225,48 @@ full_data.update(dfs_by_match)
 # ==========================
 def compute_stats(df: pd.DataFrame) -> dict:
     total_passes = len(df)
-    successful = int(df["is_won"].sum())
+    successful   = int(df["is_won"].sum())
     unsuccessful = total_passes - successful
-    accuracy = (successful / total_passes * 100.0) if total_passes else 0.0
+    accuracy     = (successful / total_passes * 100.0) if total_passes else 0.0
 
     progressive_total = int(df["progressive"].sum())
     progressive_unsuccessful = int(
         (~df["is_won"] & df.apply(
-            lambda row: is_progressive_pass(
-                row["x_start"], row["y_start"], row["x_end"], row["y_end"]
-            ), axis=1
+            lambda r: is_progressive_pass(r["x_start"], r["y_start"], r["x_end"], r["y_end"]), axis=1
         )).sum()
     )
     progressive_attempted = progressive_total + progressive_unsuccessful
-    progressive_accuracy = (
-        progressive_total / progressive_attempted * 100.0
-        if progressive_attempted else 0.0
+    progressive_accuracy  = (progressive_total / progressive_attempted * 100.0) if progressive_attempted else 0.0
+
+    to_ft      = (df["x_start"] < FINAL_THIRD_LINE_X) & (df["x_end"] >= FINAL_THIRD_LINE_X)
+    ft_total   = int(to_ft.sum())
+    ft_success = int((to_ft & df["is_won"]).sum())
+    ft_acc     = (ft_success / ft_total * 100.0) if ft_total else 0.0
+
+    to_box     = (df["x_end"] >= BOX_X_MIN) & (df["y_end"] >= BOX_Y_MIN) & (df["y_end"] <= BOX_Y_MAX)
+    box_total  = int(to_box.sum())
+    box_succ   = int((to_box & df["is_won"]).sum())
+    box_fail   = box_total - box_succ
+    box_acc    = (box_succ / box_total * 100.0) if box_total else 0.0
+
+    sw_total   = int(df["switch"].sum())
+    sw_succ    = int((df["switch"] & df["is_won"]).sum())
+    sw_fail    = sw_total - sw_succ
+    sw_acc     = (sw_succ / sw_total * 100.0) if sw_total else 0.0
+    sw_pct     = (sw_total / total_passes * 100.0) if total_passes else 0.0
+
+    return dict(
+        total_passes=total_passes, successful_passes=successful,
+        unsuccessful_passes=unsuccessful, accuracy_pct=round(accuracy, 1),
+        progressive_attempted=progressive_attempted, progressive_successful=progressive_total,
+        progressive_accuracy_pct=round(progressive_accuracy, 1),
+        to_final_third_total=ft_total, to_final_third_success=ft_success,
+        to_final_third_accuracy_pct=round(ft_acc, 1),
+        box_total=box_total, box_success=box_succ, box_unsuccess=box_fail,
+        box_accuracy_pct=round(box_acc, 1),
+        switch_total=sw_total, switch_success=sw_succ, switch_unsuccess=sw_fail,
+        switch_accuracy_pct=round(sw_acc, 1), switch_pct_of_total=round(sw_pct, 1),
     )
-
-    key_passes = int(df["video"].apply(has_video_value).sum())
-
-    to_final_third = (df["x_start"] < FINAL_THIRD_LINE_X) & (df["x_end"] >= FINAL_THIRD_LINE_X)
-    to_final_third_total = int(to_final_third.sum())
-    to_final_third_success = int((to_final_third & df["is_won"]).sum())
-    to_final_third_accuracy = (
-        (to_final_third_success / to_final_third_total * 100.0) if to_final_third_total else 0.0
-    )
-
-    to_box = (
-        (df["x_end"] >= BOX_X_MIN)
-        & (df["y_end"] >= BOX_Y_MIN)
-        & (df["y_end"] <= BOX_Y_MAX)
-    )
-    box_total = int(to_box.sum())
-    box_success = int((to_box & df["is_won"]).sum())
-    box_unsuccess = box_total - box_success
-    box_accuracy = (box_success / box_total * 100.0) if box_total else 0.0
-
-    switch_total = int(df["switch"].sum())
-    switch_success = int((df["switch"] & df["is_won"]).sum())
-    switch_unsuccess = switch_total - switch_success
-    switch_accuracy = (switch_success / switch_total * 100.0) if switch_total else 0.0
-    switch_pct_of_total = (switch_total / total_passes * 100.0) if total_passes else 0.0
-
-    return {
-        "total_passes": total_passes,
-        "successful_passes": successful,
-        "unsuccessful_passes": unsuccessful,
-        "accuracy_pct": round(accuracy, 2),
-        "key_passes": key_passes,
-        "progressive_attempted": progressive_attempted,
-        "progressive_successful": progressive_total,
-        "progressive_accuracy_pct": round(progressive_accuracy, 2),
-        "to_final_third_total": to_final_third_total,
-        "to_final_third_success": to_final_third_success,
-        "to_final_third_accuracy_pct": round(to_final_third_accuracy, 2),
-        "box_total": box_total,
-        "box_success": box_success,
-        "box_unsuccess": box_unsuccess,
-        "box_accuracy_pct": round(box_accuracy, 2),
-        "switch_total": switch_total,
-        "switch_success": switch_success,
-        "switch_unsuccess": switch_unsuccess,
-        "switch_accuracy_pct": round(switch_accuracy, 2),
-        "switch_pct_of_total": round(switch_pct_of_total, 2),
-    }
-
 
 # ==========================
 # Draw pass map
@@ -321,130 +274,81 @@ def compute_stats(df: pd.DataFrame) -> dict:
 FIG_W, FIG_H = 7.9, 5.3
 FIG_DPI = 110
 
-
 def draw_pass_map(df: pd.DataFrame, title: str):
-    pitch = Pitch(
-        pitch_type="statsbomb",
-        pitch_color="#f5f5f5",
-        line_color="#4a4a4a",
-    )
+    pitch = Pitch(pitch_type="statsbomb", pitch_color="#f5f5f5", line_color="#4a4a4a")
     fig, ax = pitch.draw(figsize=(FIG_W, FIG_H))
     fig.set_dpi(FIG_DPI)
-
     ax.axvline(x=FINAL_THIRD_LINE_X, color="#FFD54F", linewidth=1.2, alpha=0.25)
-
-    START_DOT_SIZE = 45
 
     for _, row in df.iterrows():
         is_lost = not row["is_won"]
         is_prog = bool(row["progressive"])
-        is_sw = bool(row["switch"])
+        is_sw   = bool(row["switch"])
         has_vid = has_video_value(row["video"])
 
         if is_lost:
-            if is_sw:
-                color = COLOR_SWITCH
-                alpha = 0.60
-            else:
-                color = COLOR_FAIL
-                alpha = 0.55
+            color, alpha = (COLOR_SWITCH, 0.60) if is_sw else (COLOR_FAIL, 0.55)
         elif is_sw:
-            color = COLOR_SWITCH
-            alpha = 0.85
+            color, alpha = COLOR_SWITCH, 0.85
         elif is_prog:
-            color = COLOR_PROGRESSIVE
-            alpha = 0.82
+            color, alpha = COLOR_PROGRESSIVE, 0.82
         else:
-            color = COLOR_SUCCESS
-            alpha = 0.25
+            color, alpha = COLOR_SUCCESS, 0.25
 
-        pitch.arrows(
-            row["x_start"], row["y_start"],
-            row["x_end"], row["y_end"],
-            color=color, width=1.55, headwidth=2.25, headlength=2.25,
-            ax=ax, zorder=3, alpha=alpha,
-        )
-
+        pitch.arrows(row["x_start"], row["y_start"], row["x_end"], row["y_end"],
+                     color=color, width=1.55, headwidth=2.25, headlength=2.25,
+                     ax=ax, zorder=3, alpha=alpha)
         if has_vid:
-            pitch.scatter(
-                row["x_start"], row["y_start"],
-                s=95, marker="o", facecolors="none",
-                edgecolors="#FFD54F", linewidths=2.0, ax=ax, zorder=4,
-            )
-
-        pitch.scatter(
-            row["x_start"], row["y_start"],
-            s=START_DOT_SIZE, marker="o", color=color,
-            edgecolors="white", linewidths=0.8, ax=ax, zorder=5, alpha=alpha,
-        )
+            pitch.scatter(row["x_start"], row["y_start"], s=95, marker="o",
+                          facecolors="none", edgecolors="#FFD54F", linewidths=2.0,
+                          ax=ax, zorder=4)
+        pitch.scatter(row["x_start"], row["y_start"], s=45, marker="o",
+                      color=color, edgecolors="white", linewidths=0.8,
+                      ax=ax, zorder=5, alpha=alpha)
 
     ax.set_title(title, fontsize=12)
-
     legend_elements = [
-        Line2D([0], [0], color=COLOR_SUCCESS, lw=2.5, alpha=0.25,
-               label="Successful Pass"),
-        Line2D([0], [0], color=COLOR_FAIL, lw=2.5,
-               label="Unsuccessful Pass"),
-        Line2D([0], [0], color=COLOR_PROGRESSIVE, lw=2.5,
-               label="Progressive Pass"),
-        Line2D([0], [0], color=COLOR_SWITCH, lw=2.5,
-               label="Switch Pass"),
-        Line2D([0], [0], marker="o", color="w", markerfacecolor="gray",
-               markeredgecolor="white", markersize=6, label="Start point (click)"),
-        Line2D([0], [0], marker="o", color="w", markerfacecolor="gray",
-               markeredgecolor="#FFD54F", markeredgewidth=2, markersize=7,
-               label="Has video"),
+        Line2D([0],[0], color=COLOR_SUCCESS,    lw=2.5, alpha=0.25, label="Successful Pass"),
+        Line2D([0],[0], color=COLOR_FAIL,        lw=2.5,            label="Unsuccessful Pass"),
+        Line2D([0],[0], color=COLOR_PROGRESSIVE, lw=2.5,            label="Progressive Pass"),
+        Line2D([0],[0], color=COLOR_SWITCH,      lw=2.5,            label="Switch Pass"),
+        Line2D([0],[0], marker="o", color="w", markerfacecolor="gray",
+               markeredgecolor="white",   markersize=6, label="Start point (click)"),
+        Line2D([0],[0], marker="o", color="w", markerfacecolor="gray",
+               markeredgecolor="#FFD54F", markeredgewidth=2, markersize=7, label="Has video"),
     ]
-
-    legend = ax.legend(
-        handles=legend_elements, loc="upper left", bbox_to_anchor=(0.01, 0.99),
-        frameon=True, facecolor="white", edgecolor="#cccccc", shadow=False,
-        fontsize="x-small", labelspacing=0.5, borderpad=0.5,
-    )
+    legend = ax.legend(handles=legend_elements, loc="upper left",
+                       bbox_to_anchor=(0.01, 0.99), frameon=True,
+                       facecolor="white", edgecolor="#cccccc", shadow=False,
+                       fontsize="x-small", labelspacing=0.5, borderpad=0.5)
     legend.get_frame().set_alpha(1.0)
 
-    arrow = FancyArrowPatch(
-        (0.45, 0.05), (0.55, 0.05), transform=fig.transFigure,
-        arrowstyle="-|>", mutation_scale=15, linewidth=2, color="#333333",
-    )
+    arrow = FancyArrowPatch((0.45,0.05),(0.55,0.05), transform=fig.transFigure,
+                            arrowstyle="-|>", mutation_scale=15, linewidth=2, color="#333333")
     fig.patches.append(arrow)
-    fig.text(0.5, 0.02, "Attack Direction",
-             ha="center", va="center", fontsize=9, color="#333333")
+    fig.text(0.5, 0.02, "Attack Direction", ha="center", va="center",
+             fontsize=9, color="#333333")
 
     fig.tight_layout()
     fig.canvas.draw()
-
     buf = BytesIO()
     fig.savefig(buf, format="png", dpi=FIG_DPI)
     buf.seek(0)
-    img_obj = Image.open(buf)
-    return img_obj, ax, fig
-
+    return Image.open(buf), ax, fig
 
 # ==========================
 # Sidebar
 # ==========================
 st.sidebar.header("Match Selection")
-selected_match = st.sidebar.radio(
-    "Choose the match", list(full_data.keys()), index=0
-)
+selected_match = st.sidebar.radio("Choose the match", list(full_data.keys()), index=0)
 
 st.sidebar.header("Pass Filter")
-pass_filter = st.sidebar.radio(
-    "Filter passes",
-    [
-        "All Passes",
-        "Successful Only",
-        "Unsuccessful Only",
-        "Progressive Only",
-        "To Final Third",
-        "Switch Only",
-    ],
-    index=0,
-)
+pass_filter = st.sidebar.radio("Filter passes", [
+    "All Passes", "Successful Only", "Unsuccessful Only",
+    "Progressive Only", "To Final Third", "Switch Only",
+], index=0)
 
 df = full_data[selected_match].copy()
-
 if pass_filter == "Successful Only":
     df = df[df["is_won"]].reset_index(drop=True)
 elif pass_filter == "Unsuccessful Only":
@@ -459,71 +363,159 @@ elif pass_filter == "Switch Only":
 
 stats = compute_stats(df)
 
+# ==========================
+# Stats bar HTML
+# ==========================
+def build_stats_bar(s: dict) -> str:
+    groups = [
+        {
+            "title": "General Passes",
+            "metrics": [
+                ("Total",        s["total_passes"]),
+                ("Successful",   s["successful_passes"]),
+                ("Unsuccessful", s["unsuccessful_passes"]),
+                ("Accuracy",     f"{s['accuracy_pct']}%"),
+            ],
+        },
+        {
+            "title": "Progressive",
+            "metrics": [
+                ("Attempted",  s["progressive_attempted"]),
+                ("Successful", s["progressive_successful"]),
+                ("Accuracy",   f"{s['progressive_accuracy_pct']}%"),
+            ],
+        },
+        {
+            "title": "Final Third",
+            "metrics": [
+                ("Total",      s["to_final_third_total"]),
+                ("Successful", s["to_final_third_success"]),
+                ("Accuracy",   f"{s['to_final_third_accuracy_pct']}%"),
+            ],
+        },
+        {
+            "title": "Into the Box",
+            "metrics": [
+                ("Total",        s["box_total"]),
+                ("Successful",   s["box_success"]),
+                ("Unsuccessful", s["box_unsuccess"]),
+                ("Accuracy",     f"{s['box_accuracy_pct']}%"),
+            ],
+        },
+        {
+            "title": "Switch Passes",
+            "metrics": [
+                ("Total",      s["switch_total"]),
+                ("Successful", s["switch_success"]),
+                ("% of Total", f"{s['switch_pct_of_total']}%"),
+                ("Accuracy",   f"{s['switch_accuracy_pct']}%"),
+            ],
+        },
+    ]
 
-# ==========================
-# Inline Stats HTML Builder
-# ==========================
-def build_inline_stats(stats: dict) -> str:
-    """
-    Constrói a visualização limpa e inline ('em uma linha') para as estatísticas,
-    sem usar iframe ou delimitações de borda e fundo.
-    """
-    def make_line(title: str, items: list) -> str:
-        # Une as métricas com um divisor discreto (um ponto e espaços)
-        items_str = "<span style='color: #d1d5db; margin: 0 10px;'>&bull;</span>".join(
-            f"<span style='color: #6b7280; font-size: 14.5px;'>{k}:</span> "
-            f"<span style='color: #111827; font-weight: 600; font-size: 14.5px;'>{v}</span>"
-            for k, v in items
-        )
+    def render_group(g, is_last):
+        metrics_html = ""
+        for label, value in g["metrics"]:
+            metrics_html += f"""
+              <div class="metric">
+                <span class="metric-value">{value}</span>
+                <span class="metric-label">{label}</span>
+              </div>"""
+        separator = "" if is_last else '<div class="sep"></div>'
         return f"""
-        <div style="margin-bottom: 22px;">
-            <div style="font-size: 11px; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px;">
-                {title}
-            </div>
-            <div style="line-height: 1.6; display: flex; flex-wrap: wrap; align-items: center;">
-                {items_str}
-            </div>
+        <div class="group">
+          <div class="group-title">{g["title"]}</div>
+          <div class="group-metrics">{metrics_html}</div>
         </div>
-        """
+        {separator}"""
 
-    html = "<div style='font-family: \"Inter\", -apple-system, sans-serif;'>"
-    
-    html += make_line("General Passes", [
-        ("Total", stats["total_passes"]),
-        ("Successful", stats["successful_passes"]),
-        ("Unsuccessful", stats["unsuccessful_passes"]),
-        ("Accuracy", f"{stats['accuracy_pct']:.1f}%")
-    ])
-    
-    html += make_line("Progressive Passes", [
-        ("Attempted", stats["progressive_attempted"]),
-        ("Successful", stats["progressive_successful"]),
-        ("Accuracy", f"{stats['progressive_accuracy_pct']:.1f}%")
-    ])
-    
-    html += make_line("To the Final Third", [
-        ("Total", stats["to_final_third_total"]),
-        ("Successful", stats["to_final_third_success"]),
-        ("Accuracy", f"{stats['to_final_third_accuracy_pct']:.1f}%")
-    ])
-    
-    html += make_line("Passes Into the Box", [
-        ("Total", stats["box_total"]),
-        ("Successful", stats["box_success"]),
-        ("Unsuccessful", stats["box_unsuccess"]),
-        ("Accuracy", f"{stats['box_accuracy_pct']:.1f}%")
-    ])
-    
-    html += make_line("Switch Passes", [
-        ("Total", stats["switch_total"]),
-        ("Successful", stats["switch_success"]),
-        ("% of Total", f"{stats['switch_pct_of_total']:.1f}%"),
-        ("Accuracy", f"{stats['switch_accuracy_pct']:.1f}%")
-    ])
-    
-    html += "</div>"
-    return html
+    groups_html = "".join(
+        render_group(g, i == len(groups) - 1) for i, g in enumerate(groups)
+    )
 
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
+
+  body {{
+    font-family: 'Inter', sans-serif;
+    background: transparent;
+  }}
+
+  .bar {{
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    width: 100%;
+    padding: 6px 0 10px;
+  }}
+
+  /* ── Group block ── */
+  .group {{
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 0 20px;
+  }}
+  .group:first-child {{ padding-left: 0; }}
+  .group:last-child  {{ padding-right: 0; }}
+
+  .group-title {{
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #9ca3af;
+  }}
+
+  .group-metrics {{
+    display: flex;
+    flex-direction: row;
+    gap: 16px;
+  }}
+
+  .metric {{
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }}
+
+  .metric-value {{
+    font-size: 18px;
+    font-weight: 700;
+    color: #111827;
+    line-height: 1;
+  }}
+
+  .metric-label {{
+    font-size: 9.5px;
+    font-weight: 400;
+    color: #9ca3af;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }}
+
+  /* ── Vertical separator ── */
+  .sep {{
+    width: 1px;
+    background: #e5e7eb;
+    align-self: stretch;
+    margin: 4px 0;
+    flex-shrink: 0;
+  }}
+</style>
+</head>
+<body>
+  <div class="bar">
+    {groups_html}
+  </div>
+</body>
+</html>"""
 
 # ==========================
 # Caption
@@ -531,17 +523,18 @@ def build_inline_stats(stats: dict) -> str:
 st.caption("Click the start dot to select the pass event.")
 
 # ==========================
-# Layout
+# Statistics bar (full width, horizontal)
 # ==========================
-col_stats, col_right = st.columns([1, 2], gap="large")
+components.html(build_stats_bar(stats), height=95, scrolling=False)
 
-with col_stats:
-    st.subheader("Statistics")
-    
-    # Injetando diretamente como markdown, permitindo que a altura se ajuste livremente
-    st.markdown(build_inline_stats(stats), unsafe_allow_html=True)
+st.divider()
 
-with col_right:
+# ==========================
+# Pass Map + Clip viewer
+# ==========================
+col_map, col_clip = st.columns([2, 1], gap="large")
+
+with col_map:
     st.subheader("Pass Map")
 
     img_obj, ax, fig = draw_pass_map(df, title=f"Pass Map — {selected_match}")
@@ -553,42 +546,32 @@ with col_right:
 
     if click is not None:
         real_w, real_h = img_obj.size
-        disp_w = click["width"]
-        disp_h = click["height"]
-
-        pixel_x = click["x"] * (real_w / disp_w)
-        pixel_y = click["y"] * (real_h / disp_h)
+        pixel_x    = click["x"] * (real_w / click["width"])
+        pixel_y    = click["y"] * (real_h / click["height"])
         mpl_pixel_y = real_h - pixel_y
 
         field_x, field_y = ax.transData.inverted().transform((pixel_x, mpl_pixel_y))
 
         df_sel = df.copy()
         df_sel["dist"] = np.sqrt(
-            (df_sel["x_start"] - field_x) ** 2
-            + (df_sel["y_start"] - field_y) ** 2
+            (df_sel["x_start"] - field_x) ** 2 + (df_sel["y_start"] - field_y) ** 2
         )
-
-        RADIUS = 5.0
-        candidates = df_sel[df_sel["dist"] < RADIUS].copy()
-
+        candidates = df_sel[df_sel["dist"] < 5.0].sort_values("dist")
         if not candidates.empty:
-            candidates = candidates.sort_values(by="dist", ascending=True)
             selected_pass = candidates.iloc[0]
 
     plt.close(fig)
 
-    st.divider()
+with col_clip:
     st.subheader("View Clip")
 
     if selected_pass is None:
         st.info("Click the start dot to inspect the pass details.")
     else:
-        st.success(
-            f"Selected pass: #{int(selected_pass['number'])} ({selected_pass['type']})"
-        )
+        st.success(f"Pass #{int(selected_pass['number'])} — {selected_pass['type']}")
         st.write(
-            f"Start: ({selected_pass['x_start']:.2f}, {selected_pass['y_start']:.2f})  \n"
-            f"End: ({selected_pass['x_end']:.2f}, {selected_pass['y_end']:.2f})"
+            f"**Start:** ({selected_pass['x_start']:.2f}, {selected_pass['y_start']:.2f})  \n"
+            f"**End:** ({selected_pass['x_end']:.2f}, {selected_pass['y_end']:.2f})"
         )
         st.write(f"Progressive: {'Yes' if selected_pass['progressive'] else 'No'}")
         st.write(f"Switch Pass: {'Yes' if selected_pass['switch'] else 'No'}")
@@ -599,4 +582,4 @@ with col_right:
             except Exception:
                 st.error(f"Video file not found: {selected_pass['video']}")
         else:
-            st.warning("No video is attached to this event.")
+            st.warning("No video attached to this event.")
