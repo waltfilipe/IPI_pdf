@@ -19,7 +19,10 @@ st.set_page_config(layout="wide", page_title="Pass Map Dashboard (Interactive)")
 # ==========================
 # Configuration
 # ==========================
-st.title("Pass Map Dashboard")
+st.markdown(
+    "<h1 style='margin-bottom: 0.2rem; font-size: 30px;'>Pass Map Dashboard</h1>",
+    unsafe_allow_html=True
+)
 
 FINAL_THIRD_LINE_X = 80
 
@@ -496,7 +499,7 @@ with col_stats:
         }}
         .stat-title {{
             font-weight: 600;
-            font-size: 12px;
+            font-size: 14px;
             color: #E6EAF0;
             margin-bottom: 6px;
             border-bottom: 1px solid #3C4152;
