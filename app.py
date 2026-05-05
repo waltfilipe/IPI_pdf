@@ -17,7 +17,7 @@ from streamlit_image_coordinates import streamlit_image_coordinates
 # ==========================
 # Page Configuration
 # ==========================
-st.set_page_config(layout="wide", page_title="Pass Map Analysis", initial_sidebar_state="expanded")
+st.set_page_config(layout="wide", page_title="Pass Map Dashboard", initial_sidebar_state="expanded")
 
 # ==========================
 # Configuration & Constants
@@ -386,12 +386,11 @@ def draw_pass_map(df: pd.DataFrame):
     return img_obj, ax, fig
 
 # ==========================
-# PDF Export (Kept intact)
+# PDF Export
 # ==========================
 def generate_pdf(df: pd.DataFrame, stats: dict, match_name: str, pass_filter: str) -> bytes:
     buf = BytesIO()
     with PdfPages(buf) as pdf:
-        # Página 1
         fig = plt.figure(figsize=(16, 9), facecolor="white")
         gs  = gridspec.GridSpec(
             1, 2, width_ratios=[1, 2], wspace=0.06,
@@ -465,8 +464,7 @@ def generate_pdf(df: pd.DataFrame, stats: dict, match_name: str, pass_filter: st
 # ==========================
 # Top Header
 # ==========================
-st.markdown("<h1 style='text-align: center; font-weight: 300; margin-bottom: 0;'>Pass Map Analysis</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #666; margin-top: 0;'>Executive Match Dashboard</p>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: left; font-weight: 300; margin-bottom: 0;'>Pass Map Dashboard</h1>", unsafe_allow_html=True)
 st.divider()
 
 # ==========================
@@ -512,14 +510,14 @@ with st.sidebar:
 # ==========================
 # Main Layout
 # ==========================
-col_map, col_stats = st.columns([1.8, 1], gap="medium")
+col_map, col_stats = st.columns([2, 1], gap="large")
 
 # ── Esquerda: Mapa e Clipe de Vídeo ──────────────────────────────────────────
 with col_map:
-    st.markdown("<h3 style='font-weight: 400;'>Pitch Visualization</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='font-weight: 400; margin-top: 0;'>Pitch Visualization</h3>", unsafe_allow_html=True)
     
     img_obj, ax, fig = draw_pass_map(df)
-    DISPLAY_WIDTH = 700 # Reduzido ligeiramente para caber melhor na tela
+    DISPLAY_WIDTH = 750 
     
     click = streamlit_image_coordinates(img_obj, width=DISPLAY_WIDTH)
     selected_pass = None
@@ -545,61 +543,116 @@ with col_map:
             selected_pass = candidates.iloc[0]
 
     plt.close(fig)
-    st.caption("🔍 Interaja com o mapa: clique no ponto inicial do passe para analisar os detalhes e o vídeo.")
+    st.caption("🔍 Click the start dot to inspect the pass details and video.")
 
-    # Detalhes do passe selecionado colocados em expansor/container para poupar espaço
-    if selected_pass is not None:
-        st.markdown("<h4 style='font-weight: 400;'>Pass Event Details</h4>", unsafe_allow_html=True)
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Status", "Successful" if selected_pass['is_won'] else "Unsuccessful")
-        c2.metric("Progressive", "Yes" if selected_pass['progressive'] else "No")
-        c3.metric("Switch Pass", "Yes" if selected_pass['switch'] else "No")
+    st.divider()
+    
+    # --- View Clip Section ---
+    st.markdown("<h3 style='font-weight: 400;'>View Clip</h3>", unsafe_allow_html=True)
+    
+    if selected_pass is None:
+        st.info("Click a pass on the map to view its details and associated video.")
+    else:
+        st.markdown(f"**Selected Pass:** #{int(selected_pass['number'])} &nbsp;&nbsp;|&nbsp;&nbsp; **Status:** {'Successful' if selected_pass['is_won'] else 'Unsuccessful'}")
+        
+        info_html = f"""
+        <div style="display: flex; gap: 20px; font-size: 14px; margin-bottom: 15px; color: #555;">
+            <div><b>Start:</b> ({selected_pass['x_start']:.1f}, {selected_pass['y_start']:.1f})</div>
+            <div><b>End:</b> ({selected_pass['x_end']:.1f}, {selected_pass['y_end']:.1f})</div>
+            <div><b>Progressive:</b> {'Yes' if selected_pass['progressive'] else 'No'}</div>
+            <div><b>Switch:</b> {'Yes' if selected_pass['switch'] else 'No'}</div>
+        </div>
+        """
+        st.markdown(info_html, unsafe_allow_html=True)
 
         if has_video_value(selected_pass["video"]):
             try:
                 st.video(selected_pass["video"])
             except Exception:
                 st.error(f"Video file not found: {selected_pass['video']}")
+        else:
+            st.warning("No video is attached to this event.")
 
-
-# ── Direita: Estatísticas Profissionais (Sem Cores, Mais Limpo) ────���────────
+# ── Direita: Estatísticas Profissionais em Layout Compacto HTML/CSS ──────────
 with col_stats:
-    st.markdown("<h3 style='font-weight: 400;'>Match Statistics</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='font-weight: 400; margin-top: 0;'>Statistics</h3>", unsafe_allow_html=True)
     
-    st.markdown("##### Overall Passes")
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Total", stats["total_passes"])
-    m2.metric("Successful", stats["successful_passes"])
-    m3.metric("Accuracy", f'{stats["accuracy_pct"]:.1f}%')
-    
-    st.divider()
-    
-    st.markdown("##### Progressive Passes")
-    m4, m5, m6 = st.columns(3)
-    m4.metric("Attempted", stats["progressive_attempted"])
-    m5.metric("Successful", stats["progressive_successful"])
-    m6.metric("Accuracy", f'{stats["progressive_accuracy_pct"]:.1f}%')
-    
-    st.divider()
+    stats_html = f"""
+    <style>
+    .stat-container {{
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        background-color: #ffffff;
+        padding: 5px 10px;
+    }}
+    .stat-section {{
+        margin-bottom: 16px;
+    }}
+    .stat-title {{
+        font-size: 14px;
+        font-weight: 600;
+        color: #333333;
+        margin-bottom: 6px;
+        padding-bottom: 4px;
+        border-bottom: 1px solid #eaeaea;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }}
+    .stat-row {{
+        display: flex;
+        justify-content: space-between;
+        font-size: 13px;
+        color: #555555;
+        padding: 3px 0;
+    }}
+    .stat-val {{
+        font-weight: 600;
+        color: #111111;
+    }}
+    </style>
 
-    st.markdown("##### To the Final Third")
-    m7, m8, m9 = st.columns(3)
-    m7.metric("Total", stats["to_final_third_total"])
-    m8.metric("Successful", stats["to_final_third_success"])
-    m9.metric("Accuracy", f'{stats["to_final_third_accuracy_pct"]:.1f}%')
-    
-    st.divider()
+    <div class="stat-container">
+        <!-- Overall Passes -->
+        <div class="stat-section">
+            <div class="stat-title">Overall Passes</div>
+            <div class="stat-row"><span>Total</span> <span class="stat-val">{stats['total_passes']}</span></div>
+            <div class="stat-row"><span>Successful</span> <span class="stat-val">{stats['successful_passes']}</span></div>
+            <div class="stat-row"><span>Unsuccessful</span> <span class="stat-val">{stats['unsuccessful_passes']}</span></div>
+            <div class="stat-row"><span>Accuracy</span> <span class="stat-val">{stats['accuracy_pct']:.1f}%</span></div>
+        </div>
 
-    st.markdown("##### Passes Into the Box")
-    m10, m11, m12 = st.columns(3)
-    m10.metric("Total", stats["box_total"])
-    m11.metric("Successful", stats["box_success"])
-    m12.metric("Accuracy", f'{stats["box_accuracy_pct"]:.1f}%')
-    
-    st.divider()
+        <!-- Progressive Passes -->
+        <div class="stat-section">
+            <div class="stat-title">Progressive Passes</div>
+            <div class="stat-row"><span>Attempted</span> <span class="stat-val">{stats['progressive_attempted']}</span></div>
+            <div class="stat-row"><span>Successful</span> <span class="stat-val">{stats['progressive_successful']}</span></div>
+            <div class="stat-row"><span>Accuracy</span> <span class="stat-val">{stats['progressive_accuracy_pct']:.1f}%</span></div>
+        </div>
 
-    st.markdown("##### Switch Passes")
-    m13, m14, m15 = st.columns(3)
-    m13.metric("Total", stats["switch_total"])
-    m14.metric("Successful", stats["switch_success"])
-    m15.metric("Accuracy", f'{stats["switch_accuracy_pct"]:.1f}%')
+        <!-- To Final Third -->
+        <div class="stat-section">
+            <div class="stat-title">To the Final Third</div>
+            <div class="stat-row"><span>Total</span> <span class="stat-val">{stats['to_final_third_total']}</span></div>
+            <div class="stat-row"><span>Successful</span> <span class="stat-val">{stats['to_final_third_success']}</span></div>
+            <div class="stat-row"><span>Accuracy</span> <span class="stat-val">{stats['to_final_third_accuracy_pct']:.1f}%</span></div>
+        </div>
+
+        <!-- Passes Into the Box -->
+        <div class="stat-section">
+            <div class="stat-title">Passes Into the Box</div>
+            <div class="stat-row"><span>Total</span> <span class="stat-val">{stats['box_total']}</span></div>
+            <div class="stat-row"><span>Successful</span> <span class="stat-val">{stats['box_success']}</span></div>
+            <div class="stat-row"><span>Accuracy</span> <span class="stat-val">{stats['box_accuracy_pct']:.1f}%</span></div>
+        </div>
+
+        <!-- Switch Passes -->
+        <div class="stat-section">
+            <div class="stat-title">Switch Passes</div>
+            <div class="stat-row"><span>Total</span> <span class="stat-val">{stats['switch_total']}</span></div>
+            <div class="stat-row"><span>Successful</span> <span class="stat-val">{stats['switch_success']}</span></div>
+            <div class="stat-row"><span>Accuracy</span> <span class="stat-val">{stats['switch_accuracy_pct']:.1f}%</span></div>
+            <div class="stat-row"><span>% of Total Passes</span> <span class="stat-val">{stats['switch_pct_of_total']:.1f}%</span></div>
+        </div>
+    </div>
+    """
+    
+    st.markdown(stats_html, unsafe_allow_html=True)
