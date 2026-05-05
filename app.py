@@ -198,27 +198,14 @@ def get_lane(y):
 
 
 def is_switch_pass(x_start, y_start, y_end) -> bool:
-    """
-    Switch Pass: muda do corredor esquerdo para direito ou vice-versa,
-    e o passe deve iniciar no primeiro terço (x < 40) ou segundo terço (40 <= x < 80).
-    """
     if x_start >= FINAL_THIRD_LINE_X:
         return False
     lane_start = get_lane(y_start)
     lane_end = get_lane(y_end)
-    if lane_start == "left" and lane_end == "right":
-        return True
-    if lane_start == "right" and lane_end == "left":
-        return True
-    return False
+    return (lane_start == "left" and lane_end == "right") or (lane_start == "right" and lane_end == "left")
 
 
 def is_progressive_pass(x_start, y_start, x_end, y_end) -> bool:
-    """
-    Progressive Pass:
-    Um passe COMPLETADO nos dois terços ofensivos do campo (x_start >= 35)
-    que move a bola pelo menos 25% mais perto do gol.
-    """
     if x_start < 35:
         return False
     start_dist = distance_to_goal(x_start, y_start)
@@ -234,17 +221,12 @@ def is_progressive_pass(x_start, y_start, x_end, y_end) -> bool:
 # ==========================
 dfs_by_match = {}
 for match_name, events in matches_data.items():
-    dfm = pd.DataFrame(
-        events,
-        columns=["type", "x_start", "y_start", "x_end", "y_end", "video"],
-    )
+    dfm = pd.DataFrame(events, columns=["type", "x_start", "y_start", "x_end", "y_end", "video"])
     dfm["number"] = np.arange(1, len(dfm) + 1)
     dfm["is_won"] = dfm["type"].str.contains("WON", case=False)
 
     dfm["progressive"] = dfm.apply(
-        lambda row: row["is_won"] and is_progressive_pass(
-            row["x_start"], row["y_start"], row["x_end"], row["y_end"]
-        ),
+        lambda row: row["is_won"] and is_progressive_pass(row["x_start"], row["y_start"], row["x_end"], row["y_end"]),
         axis=1,
     )
 
@@ -271,32 +253,21 @@ def compute_stats(df: pd.DataFrame) -> dict:
     progressive_total = int(df["progressive"].sum())
     progressive_unsuccessful = int(
         (~df["is_won"] & df.apply(
-            lambda row: is_progressive_pass(
-                row["x_start"], row["y_start"], row["x_end"], row["y_end"]
-            ), axis=1
+            lambda row: is_progressive_pass(row["x_start"], row["y_start"], row["x_end"], row["y_end"]),
+            axis=1
         )).sum()
     )
     progressive_attempted = progressive_total + progressive_unsuccessful
-    progressive_accuracy = (
-        progressive_total / progressive_attempted * 100.0
-        if progressive_attempted
-        else 0.0
-    )
+    progressive_accuracy = (progressive_total / progressive_attempted * 100.0) if progressive_attempted else 0.0
 
     key_passes = int(df["video"].apply(has_video_value).sum())
 
     to_final_third = (df["x_start"] < FINAL_THIRD_LINE_X) & (df["x_end"] >= FINAL_THIRD_LINE_X)
     to_final_third_total = int(to_final_third.sum())
     to_final_third_success = int((to_final_third & df["is_won"]).sum())
-    to_final_third_accuracy = (
-        (to_final_third_success / to_final_third_total * 100.0) if to_final_third_total else 0.0
-    )
+    to_final_third_accuracy = (to_final_third_success / to_final_third_total * 100.0) if to_final_third_total else 0.0
 
-    to_box = (
-        (df["x_end"] >= BOX_X_MIN)
-        & (df["y_end"] >= BOX_Y_MIN)
-        & (df["y_end"] <= BOX_Y_MAX)
-    )
+    to_box = (df["x_end"] >= BOX_X_MIN) & (df["y_end"] >= BOX_Y_MIN) & (df["y_end"] <= BOX_Y_MAX)
     box_total = int(to_box.sum())
     box_success = int((to_box & df["is_won"]).sum())
     box_unsuccess = box_total - box_success
@@ -340,18 +311,13 @@ FIG_DPI = 110
 
 
 def draw_pass_map(df: pd.DataFrame, title: str):
-    pitch = Pitch(
-        pitch_type="statsbomb",
-        pitch_color="#f5f5f5",
-        line_color="#4a4a4a",
-    )
+    pitch = Pitch(pitch_type="statsbomb", pitch_color="#f5f5f5", line_color="#4a4a4a")
     fig, ax = pitch.draw(figsize=(FIG_W, FIG_H))
     fig.set_dpi(FIG_DPI)
 
     ax.axvline(x=FINAL_THIRD_LINE_X, color="#FFD54F", linewidth=1.2, alpha=0.25)
 
     START_DOT_SIZE = 45
-
     for _, row in df.iterrows():
         is_lost = not row["is_won"]
         is_prog = bool(row["progressive"])
@@ -359,40 +325,28 @@ def draw_pass_map(df: pd.DataFrame, title: str):
         has_vid = has_video_value(row["video"])
 
         if is_lost:
-            if is_sw:
-                color = COLOR_SWITCH
-                alpha = 0.60
-            else:
-                color = COLOR_FAIL
-                alpha = 0.55
+            color, alpha = (COLOR_SWITCH, 0.60) if is_sw else (COLOR_FAIL, 0.55)
         elif is_sw:
-            color = COLOR_SWITCH
-            alpha = 0.85
+            color, alpha = COLOR_SWITCH, 0.85
         elif is_prog:
-            color = COLOR_PROGRESSIVE
-            alpha = 0.82
+            color, alpha = COLOR_PROGRESSIVE, 0.82
         else:
-            color = COLOR_SUCCESS
-            alpha = 0.25
+            color, alpha = COLOR_SUCCESS, 0.25
 
         pitch.arrows(
-            row["x_start"], row["y_start"],
-            row["x_end"], row["y_end"],
-            color=color, width=1.55, headwidth=2.25, headlength=2.25,
-            ax=ax, zorder=3, alpha=alpha,
+            row["x_start"], row["y_start"], row["x_end"], row["y_end"],
+            color=color, width=1.55, headwidth=2.25, headlength=2.25, ax=ax, zorder=3, alpha=alpha
         )
 
         if has_vid:
             pitch.scatter(
-                row["x_start"], row["y_start"],
-                s=95, marker="o", facecolors="none",
-                edgecolors="#FFD54F", linewidths=2.0, ax=ax, zorder=4,
+                row["x_start"], row["y_start"], s=95, marker="o", facecolors="none",
+                edgecolors="#FFD54F", linewidths=2.0, ax=ax, zorder=4
             )
 
         pitch.scatter(
-            row["x_start"], row["y_start"],
-            s=START_DOT_SIZE, marker="o", color=color,
-            edgecolors="white", linewidths=0.8, ax=ax, zorder=5, alpha=alpha,
+            row["x_start"], row["y_start"], s=START_DOT_SIZE, marker="o", color=color,
+            edgecolors="white", linewidths=0.8, ax=ax, zorder=5, alpha=alpha
         )
 
     ax.set_title(title, fontsize=12)
@@ -407,17 +361,16 @@ def draw_pass_map(df: pd.DataFrame, title: str):
         Line2D([0], [0], marker="o", color="w", markerfacecolor="gray",
                markeredgecolor="#FFD54F", markeredgewidth=2, markersize=7, label="Has video"),
     ]
-
     legend = ax.legend(
         handles=legend_elements, loc="upper left", bbox_to_anchor=(0.01, 0.99),
         frameon=True, facecolor="white", edgecolor="#cccccc", shadow=False,
-        fontsize="x-small", labelspacing=0.5, borderpad=0.5,
+        fontsize="x-small", labelspacing=0.5, borderpad=0.5
     )
     legend.get_frame().set_alpha(1.0)
 
     arrow = FancyArrowPatch(
         (0.45, 0.05), (0.55, 0.05), transform=fig.transFigure,
-        arrowstyle="-|>", mutation_scale=15, linewidth=2, color="#333333",
+        arrowstyle="-|>", mutation_scale=15, linewidth=2, color="#333333"
     )
     fig.patches.append(arrow)
     fig.text(0.5, 0.02, "Attack Direction", ha="center", va="center", fontsize=9, color="#333333")
@@ -436,18 +389,16 @@ def draw_pass_map(df: pd.DataFrame, title: str):
 # PDF Export
 # ==========================
 def generate_dashboard_pdf_bytes(df: pd.DataFrame, stats: dict, selected_match: str) -> bytes:
-    fig = plt.figure(figsize=(11.69, 8.27), dpi=220)  # A4 landscape
+    fig = plt.figure(figsize=(11.69, 8.27), dpi=220)
     gs = fig.add_gridspec(nrows=1, ncols=2, width_ratios=[1.05, 2.2], wspace=0.08)
 
-    # Left panel (stats)
     ax_left = fig.add_subplot(gs[0, 0])
     ax_left.set_facecolor("#1f2128")
     ax_left.set_xlim(0, 1)
     ax_left.set_ylim(0, 1)
     ax_left.axis("off")
 
-    ax_left.text(0.5, 0.97, "Statistics", ha="center", va="top",
-                 fontsize=13, color="#E6EAF0", fontweight="bold")
+    ax_left.text(0.5, 0.97, "Statistics", ha="center", va="top", fontsize=13, color="#E6EAF0", fontweight="bold")
 
     def draw_card(y_top, title, line_text):
         h = 0.16
@@ -457,37 +408,25 @@ def generate_dashboard_pdf_bytes(df: pd.DataFrame, stats: dict, selected_match: 
             linewidth=1, edgecolor="#343746", facecolor="#262730"
         )
         ax_left.add_patch(card)
-        ax_left.text(0.5, y_top - 0.035, title, ha="center", va="center",
-                     fontsize=12, color="#E6EAF0", fontweight="bold")
+        ax_left.text(0.5, y_top - 0.035, title, ha="center", va="center", fontsize=12, color="#E6EAF0", fontweight="bold")
         ax_left.plot([0.08, 0.92], [y_top - 0.055, y_top - 0.055], color="#3C4152", lw=1)
-        ax_left.text(0.08, y_top - 0.10, line_text, ha="left", va="center",
-                     fontsize=10.5, color="#F1F3F5")
+        ax_left.text(0.08, y_top - 0.10, line_text, ha="left", va="center", fontsize=10.5, color="#F1F3F5")
 
     y = 0.90
-    draw_card(y, "General Passes",
-              f"Total: {stats['total_passes']} | Successful: {stats['successful_passes']} | Accuracy: {stats['accuracy_pct']}%")
+    draw_card(y, "General Passes", f"Total: {stats['total_passes']} | Successful: {stats['successful_passes']} | Accuracy: {stats['accuracy_pct']}%")
     y -= 0.175
-    draw_card(y, "Progressive Passes",
-              f"Total: {stats['progressive_attempted']} | Successful: {stats['progressive_successful']} | Accuracy: {stats['progressive_accuracy_pct']}%")
+    draw_card(y, "Progressive Passes", f"Total: {stats['progressive_attempted']} | Successful: {stats['progressive_successful']} | Accuracy: {stats['progressive_accuracy_pct']}%")
     y -= 0.175
-    draw_card(y, "To the Final Third",
-              f"Total: {stats['to_final_third_total']} | Successful: {stats['to_final_third_success']} | Accuracy: {stats['to_final_third_accuracy_pct']}%")
+    draw_card(y, "To the Final Third", f"Total: {stats['to_final_third_total']} | Successful: {stats['to_final_third_success']} | Accuracy: {stats['to_final_third_accuracy_pct']}%")
     y -= 0.175
-    draw_card(y, "Passes Into the Box",
-              f"Total: {stats['box_total']} | Successful: {stats['box_success']} | Accuracy: {stats['box_accuracy_pct']}%")
+    draw_card(y, "Passes Into the Box", f"Total: {stats['box_total']} | Successful: {stats['box_success']} | Accuracy: {stats['box_accuracy_pct']}%")
     y -= 0.175
-    draw_card(y, "Switch Passes",
-              f"Total: {stats['switch_total']} | Successful: {stats['switch_success']} | Accuracy: {stats['switch_accuracy_pct']}% | % Total: {stats['switch_pct_of_total']}%")
+    draw_card(y, "Switch Passes", f"Total: {stats['switch_total']} | Successful: {stats['switch_success']} | Accuracy: {stats['switch_accuracy_pct']}% | % Total: {stats['switch_pct_of_total']}%")
 
-    # Right panel (pitch)
     ax_right = fig.add_subplot(gs[0, 1])
     ax_right.remove()
 
-    pitch = Pitch(
-        pitch_type="statsbomb",
-        pitch_color="#f5f5f5",
-        line_color="#4a4a4a",
-    )
+    pitch = Pitch(pitch_type="statsbomb", pitch_color="#f5f5f5", line_color="#4a4a4a")
     pitch.draw(ax=fig.add_subplot(gs[0, 1]))
     ax_pitch = fig.axes[-1]
 
@@ -501,39 +440,28 @@ def generate_dashboard_pdf_bytes(df: pd.DataFrame, stats: dict, selected_match: 
         has_vid = has_video_value(row["video"])
 
         if is_lost:
-            if is_sw:
-                color = COLOR_SWITCH
-                alpha = 0.60
-            else:
-                color = COLOR_FAIL
-                alpha = 0.55
+            color, alpha = (COLOR_SWITCH, 0.60) if is_sw else (COLOR_FAIL, 0.55)
         elif is_sw:
-            color = COLOR_SWITCH
-            alpha = 0.85
+            color, alpha = COLOR_SWITCH, 0.85
         elif is_prog:
-            color = COLOR_PROGRESSIVE
-            alpha = 0.82
+            color, alpha = COLOR_PROGRESSIVE, 0.82
         else:
-            color = COLOR_SUCCESS
-            alpha = 0.25
+            color, alpha = COLOR_SUCCESS, 0.25
 
         pitch.arrows(
             row["x_start"], row["y_start"], row["x_end"], row["y_end"],
-            color=color, width=1.55, headwidth=2.25, headlength=2.25,
-            ax=ax_pitch, zorder=3, alpha=alpha,
+            color=color, width=1.55, headwidth=2.25, headlength=2.25, ax=ax_pitch, zorder=3, alpha=alpha
         )
 
         if has_vid:
             pitch.scatter(
-                row["x_start"], row["y_start"],
-                s=95, marker="o", facecolors="none",
-                edgecolors="#FFD54F", linewidths=2.0, ax=ax_pitch, zorder=4,
+                row["x_start"], row["y_start"], s=95, marker="o", facecolors="none",
+                edgecolors="#FFD54F", linewidths=2.0, ax=ax_pitch, zorder=4
             )
 
         pitch.scatter(
-            row["x_start"], row["y_start"],
-            s=START_DOT_SIZE, marker="o", color=color,
-            edgecolors="white", linewidths=0.8, ax=ax_pitch, zorder=5, alpha=alpha,
+            row["x_start"], row["y_start"], s=START_DOT_SIZE, marker="o", color=color,
+            edgecolors="white", linewidths=0.8, ax=ax_pitch, zorder=5, alpha=alpha
         )
 
     ax_pitch.set_title(f"Pass Map — {selected_match}", fontsize=13)
@@ -543,15 +471,13 @@ def generate_dashboard_pdf_bytes(df: pd.DataFrame, stats: dict, selected_match: 
         Line2D([0], [0], color=COLOR_FAIL, lw=2.5, label="Unsuccessful Pass"),
         Line2D([0], [0], color=COLOR_PROGRESSIVE, lw=2.5, label="Progressive Pass"),
         Line2D([0], [0], color=COLOR_SWITCH, lw=2.5, label="Switch Pass"),
-        Line2D([0], [0], marker="o", color="w", markerfacecolor="gray",
-               markeredgecolor="white", markersize=6, label="Start point"),
-        Line2D([0], [0], marker="o", color="w", markerfacecolor="gray",
-               markeredgecolor="#FFD54F", markeredgewidth=2, markersize=7, label="Has video"),
+        Line2D([0], [0], marker="o", color="w", markerfacecolor="gray", markeredgecolor="white", markersize=6, label="Start point"),
+        Line2D([0], [0], marker="o", color="w", markerfacecolor="gray", markeredgecolor="#FFD54F", markeredgewidth=2, markersize=7, label="Has video"),
     ]
     ax_pitch.legend(
         handles=legend_elements, loc="upper left", bbox_to_anchor=(0.01, 0.99),
         frameon=True, facecolor="white", edgecolor="#cccccc", shadow=False,
-        fontsize="x-small", labelspacing=0.5, borderpad=0.5,
+        fontsize="x-small", labelspacing=0.5, borderpad=0.5
     )
 
     fig.suptitle("Pass Map Dashboard", fontsize=16, y=0.99)
@@ -569,7 +495,6 @@ def generate_dashboard_pdf_bytes(df: pd.DataFrame, stats: dict, selected_match: 
 # Sidebar
 # ==========================
 logo_url = "https://github.com/waltfilipe/IPI_pdf/blob/main/Logo_SGA_Completa_Horizontal_Branco%20(1).png?raw=true"
-
 st.sidebar.markdown(
     f"""
     <div style="display: flex; justify-content: center; margin-top: 6px; margin-bottom: 14px;">
@@ -580,31 +505,16 @@ st.sidebar.markdown(
 )
 
 st.sidebar.header("Match Selection")
-selected_match = st.sidebar.radio(
-    "Choose the match", list(full_data.keys()), index=0
-)
-
-st.sidebar.header("Match Selection")
-selected_match = st.sidebar.radio(
-    "Choose the match", list(full_data.keys()), index=0
-)
+selected_match = st.sidebar.radio("Choose the match", list(full_data.keys()), index=0)
 
 st.sidebar.header("Pass Filter")
 pass_filter = st.sidebar.radio(
     "Filter passes",
-    [
-        "All Passes",
-        "Successful Only",
-        "Unsuccessful Only",
-        "Progressive Only",
-        "To Final Third",
-        "Switch Only",
-    ],
+    ["All Passes", "Successful Only", "Unsuccessful Only", "Progressive Only", "To Final Third", "Switch Only"],
     index=0,
 )
 
 df = full_data[selected_match].copy()
-
 if pass_filter == "Successful Only":
     df = df[df["is_won"]].reset_index(drop=True)
 elif pass_filter == "Unsuccessful Only":
@@ -612,8 +522,7 @@ elif pass_filter == "Unsuccessful Only":
 elif pass_filter == "Progressive Only":
     df = df[df["progressive"]].reset_index(drop=True)
 elif pass_filter == "To Final Third":
-    mask = (df["x_start"] < FINAL_THIRD_LINE_X) & (df["x_end"] >= FINAL_THIRD_LINE_X)
-    df = df[mask].reset_index(drop=True)
+    df = df[(df["x_start"] < FINAL_THIRD_LINE_X) & (df["x_end"] >= FINAL_THIRD_LINE_X)].reset_index(drop=True)
 elif pass_filter == "Switch Only":
     df = df[df["switch"]].reset_index(drop=True)
 
@@ -718,12 +627,10 @@ with col_right:
     st.subheader("Pass Map")
 
     img_obj, ax, fig = draw_pass_map(df, title=f"Pass Map — {selected_match}")
-
     DISPLAY_WIDTH = 780
     click = streamlit_image_coordinates(img_obj, width=DISPLAY_WIDTH)
 
     selected_pass = None
-
     if click is not None:
         real_w, real_h = img_obj.size
         disp_w = click["width"]
@@ -736,17 +643,11 @@ with col_right:
         field_x, field_y = ax.transData.inverted().transform((pixel_x, mpl_pixel_y))
 
         df_sel = df.copy()
-        df_sel["dist"] = np.sqrt(
-            (df_sel["x_start"] - field_x) ** 2
-            + (df_sel["y_start"] - field_y) ** 2
-        )
+        df_sel["dist"] = np.sqrt((df_sel["x_start"] - field_x) ** 2 + (df_sel["y_start"] - field_y) ** 2)
 
-        RADIUS = 5.0
-        candidates = df_sel[df_sel["dist"] < RADIUS].copy()
-
+        candidates = df_sel[df_sel["dist"] < 5.0].copy()
         if not candidates.empty:
-            candidates = candidates.sort_values(by="dist", ascending=True)
-            selected_pass = candidates.iloc[0]
+            selected_pass = candidates.sort_values(by="dist", ascending=True).iloc[0]
 
     plt.close(fig)
 
@@ -756,9 +657,7 @@ with col_right:
     if selected_pass is None:
         st.info("Click the start dot to inspect the pass details.")
     else:
-        st.success(
-            f"Selected pass: #{int(selected_pass['number'])} ({selected_pass['type']})"
-        )
+        st.success(f"Selected pass: #{int(selected_pass['number'])} ({selected_pass['type']})")
         st.write(
             f"Start: ({selected_pass['x_start']:.2f}, {selected_pass['y_start']:.2f})  \n"
             f"End: ({selected_pass['x_end']:.2f}, {selected_pass['y_end']:.2f})"
@@ -782,3 +681,4 @@ with col_right:
         file_name=f"pass_map_dashboard_{selected_match.replace(' ', '_').lower()}.pdf",
         mime="application/pdf",
     )
+    
