@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -462,180 +461,68 @@ stats = compute_stats(df)
 
 
 # ==========================
-# Stats panel HTML builder
+# Inline Stats HTML Builder
 # ==========================
-def build_stats_html(stats: dict) -> str:
-
-    def card(title: str, rows: list) -> str:
-        """
-        rows: list of (label, value) tuples.
-        The last row is always Accuracy and gets a subtle progress bar.
-        """
-        rows_html = ""
-        for i, (label, value) in enumerate(rows):
-            is_last = i == len(rows) - 1
-            divider = "" if i == 0 else '<div class="row-divider"></div>'
-            accent_class = "row-accent" if is_last else ""
-            rows_html += f"""
-            {divider}
-            <div class="stat-row {accent_class}">
-              <span class="stat-label">{label}</span>
-              <span class="stat-value">{value}</span>
-            </div>"""
-
-        # Progress bar using the last value (accuracy)
-        try:
-            pct = float(str(rows[-1][1]).replace("%", "").strip())
-        except ValueError:
-            pct = 0.0
-        pct = max(0.0, min(100.0, pct))
-
+def build_inline_stats(stats: dict) -> str:
+    """
+    Constrói a visualização limpa e inline ('em uma linha') para as estatísticas,
+    sem usar iframe ou delimitações de borda e fundo.
+    """
+    def make_line(title: str, items: list) -> str:
+        # Une as métricas com um divisor discreto (um ponto e espaços)
+        items_str = "<span style='color: #d1d5db; margin: 0 10px;'>&bull;</span>".join(
+            f"<span style='color: #6b7280; font-size: 14.5px;'>{k}:</span> "
+            f"<span style='color: #111827; font-weight: 600; font-size: 14.5px;'>{v}</span>"
+            for k, v in items
+        )
         return f"""
-        <div class="card">
-          <div class="card-title">{title}</div>
-          <div class="card-body">
-            {rows_html}
-          </div>
-          <div class="bar-track">
-            <div class="bar-fill" style="width:{pct:.1f}%"></div>
-          </div>
-        </div>"""
+        <div style="margin-bottom: 22px;">
+            <div style="font-size: 11px; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px;">
+                {title}
+            </div>
+            <div style="line-height: 1.6; display: flex; flex-wrap: wrap; align-items: center;">
+                {items_str}
+            </div>
+        </div>
+        """
 
-    cards_html = ""
-
-    cards_html += card("General Passes", [
-        ("Total",       stats["total_passes"]),
-        ("Successful",  stats["successful_passes"]),
-        ("Unsuccessful",stats["unsuccessful_passes"]),
-        ("Accuracy",    f"{stats['accuracy_pct']:.1f}%"),
+    html = "<div style='font-family: \"Inter\", -apple-system, sans-serif;'>"
+    
+    html += make_line("General Passes", [
+        ("Total", stats["total_passes"]),
+        ("Successful", stats["successful_passes"]),
+        ("Unsuccessful", stats["unsuccessful_passes"]),
+        ("Accuracy", f"{stats['accuracy_pct']:.1f}%")
     ])
-
-    cards_html += card("Progressive Passes", [
-        ("Attempted",   stats["progressive_attempted"]),
-        ("Successful",  stats["progressive_successful"]),
-        ("Accuracy",    f"{stats['progressive_accuracy_pct']:.1f}%"),
+    
+    html += make_line("Progressive Passes", [
+        ("Attempted", stats["progressive_attempted"]),
+        ("Successful", stats["progressive_successful"]),
+        ("Accuracy", f"{stats['progressive_accuracy_pct']:.1f}%")
     ])
-
-    cards_html += card("To the Final Third", [
-        ("Total",       stats["to_final_third_total"]),
-        ("Successful",  stats["to_final_third_success"]),
-        ("Accuracy",    f"{stats['to_final_third_accuracy_pct']:.1f}%"),
+    
+    html += make_line("To the Final Third", [
+        ("Total", stats["to_final_third_total"]),
+        ("Successful", stats["to_final_third_success"]),
+        ("Accuracy", f"{stats['to_final_third_accuracy_pct']:.1f}%")
     ])
-
-    cards_html += card("Passes Into the Box", [
-        ("Total",       stats["box_total"]),
-        ("Successful",  stats["box_success"]),
-        ("Unsuccessful",stats["box_unsuccess"]),
-        ("Accuracy",    f"{stats['box_accuracy_pct']:.1f}%"),
+    
+    html += make_line("Passes Into the Box", [
+        ("Total", stats["box_total"]),
+        ("Successful", stats["box_success"]),
+        ("Unsuccessful", stats["box_unsuccess"]),
+        ("Accuracy", f"{stats['box_accuracy_pct']:.1f}%")
     ])
-
-    cards_html += card("Switch Passes", [
-        ("Total",       stats["switch_total"]),
-        ("Successful",  stats["switch_success"]),
-        ("% of Total",  f"{stats['switch_pct_of_total']:.1f}%"),
-        ("Accuracy",    f"{stats['switch_accuracy_pct']:.1f}%"),
+    
+    html += make_line("Switch Passes", [
+        ("Total", stats["switch_total"]),
+        ("Successful", stats["switch_success"]),
+        ("% of Total", f"{stats['switch_pct_of_total']:.1f}%"),
+        ("Accuracy", f"{stats['switch_accuracy_pct']:.1f}%")
     ])
-
-    return f"""<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
-
-  *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
-
-  body {{
-    font-family: 'Inter', sans-serif;
-    background: transparent;
-  }}
-
-  .panel {{
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }}
-
-  /* ── Card ── */
-  .card {{
-    background: #ffffff;
-    border: 1px solid #e5e7eb;
-    border-radius: 10px;
-    overflow: hidden;
-  }}
-
-  /* ── Title ── */
-  .card-title {{
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.8px;
-    text-transform: uppercase;
-    color: #6b7280;
-    padding: 9px 14px 7px;
-    border-bottom: 1px solid #f3f4f6;
-  }}
-
-  /* ── Rows ── */
-  .card-body {{
-    padding: 4px 0;
-  }}
-
-  .stat-row {{
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 5px 14px;
-  }}
-
-  .row-divider {{
-    height: 1px;
-    background: #f3f4f6;
-    margin: 0 14px;
-  }}
-
-  .stat-label {{
-    font-size: 11.5px;
-    font-weight: 400;
-    color: #6b7280;
-  }}
-
-  .stat-value {{
-    font-size: 13px;
-    font-weight: 600;
-    color: #111827;
-  }}
-
-  /* Accuracy row — slightly darker bg */
-  .row-accent {{
-    background: #f9fafb;
-  }}
-  .row-accent .stat-label {{
-    color: #374151;
-    font-weight: 500;
-  }}
-  .row-accent .stat-value {{
-    color: #111827;
-  }}
-
-  /* ── Progress bar ── */
-  .bar-track {{
-    height: 3px;
-    background: #f3f4f6;
-    overflow: hidden;
-  }}
-  .bar-fill {{
-    height: 100%;
-    background: #d1d5db;
-    border-radius: 0;
-  }}
-</style>
-</head>
-<body>
-  <div class="panel">
-    {cards_html}
-  </div>
-</body>
-</html>"""
+    
+    html += "</div>"
+    return html
 
 
 # ==========================
@@ -650,7 +537,9 @@ col_stats, col_right = st.columns([1, 2], gap="large")
 
 with col_stats:
     st.subheader("Statistics")
-    components.html(build_stats_html(stats), height=530, scrolling=False)
+    
+    # Injetando diretamente como markdown, permitindo que a altura se ajuste livremente
+    st.markdown(build_inline_stats(stats), unsafe_allow_html=True)
 
 with col_right:
     st.subheader("Pass Map")
